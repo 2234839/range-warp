@@ -10,52 +10,28 @@ export function replaceTextWithElement(
   end: number,
   elementCreator: () => Node,
 ): void {
-  // 获取所有文本节点
-  const textNodes = getAllTextNodes(container);
-
-  // 找到起始和结束节点
-  let currentPos = 0;
-  let startNode: Text | null = null;
-  let startOffset = 0;
-  let endNode: Text | null = null;
-  let endOffset = 0;
-
-  for (const node of textNodes) {
-    const text = node.textContent || '';
-    const nodeEnd = currentPos + text.length;
-
-    if (!startNode && start < nodeEnd) {
-      startNode = node;
-      startOffset = start - currentPos;
-    }
-
-    if (!endNode && end <= nodeEnd) {
-      endNode = node;
-      endOffset = end - currentPos;
-      break;
-    }
-
-    currentPos = nodeEnd;
+  const range = createRangeFromTextPositions(container, start, end);
+  if (range === null) {
+    throw {
+      msg: '无法创建范围',
+      container,
+      start,
+      end,
+    };
   }
 
-  if (startNode && endNode) {
-    const range = document.createRange();
-    range.setStart(startNode, startOffset);
-    range.setEnd(endNode, endOffset);
+  /** **核心方法** 提取范围内的内容，这是可以跨 dom 标签提取的  */
+  const extractedContent = range.extractContents();
 
-    // 提取范围内的内容（包括所有HTML标签和文本）
-    const extractedContent = range.extractContents();
+  // 创建新元素并插入提取的内容
+  const newElement = elementCreator();
+  newElement.appendChild(extractedContent);
 
-    // 创建新元素并插入提取的内容
-    const newElement = elementCreator();
-    newElement.appendChild(extractedContent);
+  // 将新元素插入到原位置
+  range.insertNode(newElement);
 
-    // 将新元素插入到原位置
-    range.insertNode(newElement);
-
-    // 检查并清理空的子元素
-    cleanupEmptyChildElements(newElement);
-  }
+  // 检查并清理空的子元素
+  cleanupEmptyChildElements(newElement);
 }
 
 /** 清理元素中的空子元素 */
@@ -63,7 +39,7 @@ export function cleanupEmptyChildElements(element: Node): void {
   if (!(element instanceof Element)) return;
   // 查找所有空的子元素
   const emptyElements = Array.from(element.children).filter(
-    (child) => child.textContent?.trim() === '' && child.childNodes.length === 0,
+    (child) => child.textContent === '' && child.childNodes.length === 0,
   );
 
   // 从后往前删除空元素
@@ -119,20 +95,22 @@ export function formatTextRange(
   });
 }
 
-/** 创建基于文本位置的精确范围 */
+/** 在 container 中创建基于文本位置的精确范围 */
 export function createRangeFromTextPositions(
-  _container: HTMLElement,
+  container: HTMLElement,
   start: number,
   end: number,
-  textNodes: Text[],
 ): Range | null {
+  // 获取所有文本节点
+  const textNodes = getAllTextNodes(container);
+
+  // 找到起始和结束节点
   let currentPos = 0;
   let startNode: Text | null = null;
   let startOffset = 0;
   let endNode: Text | null = null;
   let endOffset = 0;
 
-  // 找到起始和结束节点
   for (const node of textNodes) {
     const text = node.textContent || '';
     const nodeEnd = currentPos + text.length;
@@ -150,18 +128,15 @@ export function createRangeFromTextPositions(
 
     currentPos = nodeEnd;
   }
+  if (!(startNode && endNode)) return null;
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
 
-  if (startNode && endNode) {
-    const range = document.createRange();
-    range.setStart(startNode, startOffset);
-    range.setEnd(endNode, endOffset);
-    return range;
-  }
-
-  return null;
+  return range;
 }
 
-/** 通用的文本高亮函数 - 接受一个字符串参数 */
+/** 留待之后使用 通用的文本高亮函数 - 接受一个字符串参数 */
 export function highlightTextByText(
   container: HTMLElement,
   searchText: string,
