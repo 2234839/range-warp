@@ -9,12 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.5.22"
+    "vue": "^3.5.22",
+    "vue-router": "^4.6.3"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.15",
     "@types/node": "^24.6.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
+    "tailwindcss": "^4.1.15",
     "typescript": "~5.9.3",
     "vite": "npm:rolldown-vite@7.1.14",
     "vue-tsc": "^3.1.0"

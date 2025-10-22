@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, useTemplateRef } from 'vue';
+  import { ref, useTemplateRef, readonly } from 'vue';
   import {
     formatTextRange,
     highlightTextByText,
@@ -15,7 +15,22 @@
     italic: false,
     underline: false,
     strikethrough: false,
+    highlight: false,
   });
+
+  /** 当前选中的文本范围 */
+  const selectedRange = ref({
+    start: 0,
+    end: 0
+  });
+
+  /** 组件事件定义 */
+  interface Emits {
+    selectionChange: [start: number, end: number];
+    formatApply: [start: number, end: number, format: string];
+  }
+
+  const emit = defineEmits<Emits>();
 
   function run() {
     highlightText();
@@ -69,6 +84,9 @@
       case 'strikethrough':
         tagName = 's';
         break;
+      case 'highlight':
+        tagName = 'mark';
+        break;
       default:
         return;
     }
@@ -91,6 +109,9 @@
       // 如果没有格式，则添加格式 - 基于文本位置
       formatTextRange(editDiv.value, start, end, tagName);
     }
+
+    // 触发格式应用事件
+    emit('formatApply', start, end, format);
 
     // 使用 setTimeout 异步更新格式状态，避免循环调用
     setTimeout(() => {
@@ -127,6 +148,7 @@
         underline: isNodeFormatted(parentElement, 'u'),
         strikethrough:
           isNodeFormatted(parentElement, 's') || isNodeFormatted(parentElement, 'strike'),
+        highlight: isNodeFormatted(parentElement, 'mark'),
       };
     }
   }
@@ -149,35 +171,174 @@
   function handleSelectionChange() {
     if (!isProcessing.value) {
       updateFormatState();
+      updateSelectedRange();
     }
   }
+
+  /** 更新选中的文本范围 */
+  function updateSelectedRange() {
+    if (!editDiv.value) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      selectedRange.value = { start: 0, end: 0 };
+      emit('selectionChange', 0, 0);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (range.collapsed) {
+      selectedRange.value = { start: 0, end: 0 };
+      emit('selectionChange', 0, 0);
+      return;
+    }
+
+    // 计算选区的文本位置
+    const preSelectionRange = range.cloneRange();
+    preSelectionRange.selectNodeContents(editDiv.value);
+    preSelectionRange.setEnd(range.startContainer, range.startOffset);
+    const start = preSelectionRange.toString().length;
+    const end = start + range.toString().length;
+
+    selectedRange.value = { start, end };
+    emit('selectionChange', start, end);
+  }
+
+  /** 应用文本格式 */
+  function applyTextFormat(start: number, end: number, format: string) {
+    if (!editDiv.value) return;
+
+    try {
+      let tagName = '';
+      switch (format) {
+        case 'bold':
+          tagName = 'strong';
+          break;
+        case 'italic':
+          tagName = 'em';
+          break;
+        case 'underline':
+          tagName = 'u';
+          break;
+        case 'strikethrough':
+          tagName = 's';
+          break;
+        case 'highlight':
+          tagName = 'mark';
+          break;
+        default:
+          return;
+      }
+
+      // 检查范围内是否已存在对应的格式
+      const isFormatted = checkSelectionHasFormat(editDiv.value, start, end, tagName);
+
+      if (isFormatted) {
+        // 如果已有格式，则取消格式
+        unwrapElementsByTag(editDiv.value, start, end, tagName);
+      } else {
+        // 如果没有格式，则添加格式
+        formatTextRange(editDiv.value, start, end, tagName);
+      }
+
+      // 触发格式应用事件
+      emit('formatApply', start, end, format);
+
+      // 异步更新格式状态
+      setTimeout(() => {
+        updateFormatState();
+      }, 0);
+    } catch (error) {
+      console.error('应用格式失败:', error);
+    }
+  }
+
+/** 暴露给父组件调用的方法 */
+defineExpose({
+  applyTextFormat,
+  selectedRange: readonly(selectedRange)
+});
 </script>
 
 <template>
-  <div class="editor-container">
+  <div class="border border-gray-300 rounded-lg overflow-hidden font-sans bg-white shadow-sm">
     <!-- 工具栏 -->
-    <div class="toolbar">
-      <button @click="applyFormat('bold')" :class="{ active: formatState.bold }" title="加粗">
+    <div class="flex items-center p-2 bg-gray-50 border-b border-gray-200 gap-1">
+      <!-- 格式化按钮组 -->
+      <button
+        @click="applyFormat('bold')"
+        :class="[
+          'p-2 border rounded text-sm font-bold min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
+          formatState.bold
+            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400'
+        ]"
+        title="加粗">
         <strong>B</strong>
       </button>
-      <button @click="applyFormat('italic')" :class="{ active: formatState.italic }" title="斜体">
+
+      <button
+        @click="applyFormat('italic')"
+        :class="[
+          'p-2 border rounded text-sm italic min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
+          formatState.italic
+            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400'
+        ]"
+        title="斜体">
         <em>I</em>
       </button>
+
       <button
         @click="applyFormat('underline')"
-        :class="{ active: formatState.underline }"
+        :class="[
+          'p-2 border rounded text-sm underline min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
+          formatState.underline
+            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400'
+        ]"
         title="下划线">
         <u>U</u>
       </button>
+
       <button
         @click="applyFormat('strikethrough')"
-        :class="{ active: formatState.strikethrough }"
+        :class="[
+          'p-2 border rounded text-sm line-through min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
+          formatState.strikethrough
+            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400'
+        ]"
         title="删除线">
         <s>S</s>
       </button>
-      <div class="separator"></div>
-      <button @click="run()" title="高亮测试">高亮</button>
-      <button @click="copyHTML()" title="复制HTML内容">复制HTML</button>
+
+      <!-- 分隔线 -->
+      <div class="w-px h-6 bg-gray-300 mx-1"></div>
+
+      <!-- 高亮按钮 -->
+      <button
+        @click="applyFormat('highlight')"
+        :class="[
+          'p-2 border rounded text-sm min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
+          formatState.highlight
+            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400'
+        ]"
+        title="高亮">
+        <span class="px-1 bg-yellow-200 rounded text-xs font-bold">H</span>
+      </button>
+
+      <!-- 分隔线 -->
+      <div class="w-px h-6 bg-gray-300 mx-1"></div>
+
+      <!-- 功能按钮 -->
+      <button
+        @click="copyHTML()"
+        class="p-2 border rounded text-sm bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400 min-w-[32px] h-8 flex items-center justify-center transition-all duration-200"
+        title="复制HTML内容">
+        📋
+      </button>
     </div>
 
     <!-- 编辑区域 -->
@@ -186,128 +347,46 @@
       ref="editDiv"
       @mouseup="handleSelectionChange"
       @keyup="handleSelectionChange"
-      class="editor-content">
+      class="p-4 min-h-[200px] outline-none leading-relaxed text-sm whitespace-pre-wrap break-words focus:bg-gray-50/50">
       测试文本 测试中
     </div>
   </div>
 </template>
-<style lang="css" scoped>
-  .editor-container {
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    overflow: hidden;
-    font-family: Arial, sans-serif;
-  }
+<style scoped>
+/* 文本格式深度样式 */
+:deep(strong),
+:deep(b) {
+  font-weight: bold;
+}
 
-  .toolbar {
-    display: flex;
-    align-items: center;
-    padding: 8px;
-    background-color: #f5f5f5;
-    border-bottom: 1px solid #ddd;
-    gap: 4px;
-  }
+:deep(em),
+:deep(i) {
+  font-style: italic;
+}
 
-  .toolbar button {
-    padding: 6px 12px;
-    border: 1px solid #ccc;
-    background-color: #fff;
-    border-radius: 3px;
-    cursor: pointer;
-    font-size: 14px;
-    min-width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-  }
+:deep(u) {
+  text-decoration: underline;
+}
 
-  .toolbar button:hover {
-    background-color: #e9e9e9;
-    border-color: #999;
-  }
+:deep(s),
+:deep(strike) {
+  text-decoration: line-through;
+}
 
-  .toolbar button.active {
-    background-color: #007bff;
-    color: white;
-    border-color: #0056b3;
-  }
+:deep(mark) {
+  background-color: #fef08a;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
 
-  .toolbar button.active:hover {
-    background-color: #0056b3;
-  }
+/* 焦点样式 */
+[contenteditable]:focus {
+  outline: none;
+}
 
-  .separator {
-    width: 1px;
-    height: 24px;
-    background-color: #ccc;
-    margin: 0 8px;
-  }
-
-  .editor-content {
-    padding: 12px;
-    min-height: 200px;
-    outline: none;
-    line-height: 1.5;
-    font-size: 14px;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-
-  .editor-content:focus {
-    background-color: #fafafa;
-  }
-
-  /* 文本格式样式 */
-  :deep(strong),
-  :deep(b) {
-    font-weight: bold;
-  }
-
-  :deep(em),
-  :deep(i) {
-    font-style: italic;
-  }
-
-  :deep(u) {
-    text-decoration: underline;
-  }
-
-  :deep(s),
-  :deep(strike) {
-    text-decoration: line-through;
-  }
-
-  /* 高亮样式 - 确保与其他格式兼容 */
-  :deep(.highlight) {
-    background-color: yellow;
-    padding: 1px 2px;
-    border-radius: 2px;
-    display: inline;
-  }
-
-  /* 确保格式化标签内的文本也能被高亮 */
-  :deep(strong .highlight),
-  :deep(em .highlight),
-  :deep(u .highlight),
-  :deep(s .highlight) {
-    background-color: inherit;
-    background-image: linear-gradient(rgba(255, 255, 0, 0.3), rgba(255, 255, 0, 0.3));
-    border-radius: 2px;
-    padding: 1px 2px;
-  }
-
-  /* 高亮文本的格式化样式 */
-  :deep(.highlight strong),
-  :deep(.highlight em),
-  :deep(.highlight u),
-  :deep(.highlight s) {
-    background-color: inherit;
-  }
-
-  /* 选中文本的样式 */
-  .editor-content::selection {
-    background-color: #b3d4fc;
-  }
+/* 按钮焦点样式 */
+button:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
 </style>
