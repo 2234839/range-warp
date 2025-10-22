@@ -8,6 +8,7 @@
   const inputValue = ref('');
   const numberValue = ref(0);
   const disabledInput = ref('禁用的输入框');
+  const readonlyInput = ref('只读输入框');
 
   /** 处理按钮点击事件 */
   const handleButtonClick = (message: string) => {
@@ -139,7 +140,7 @@
             disabled
           />
           <BaseInput
-            v-model="只读输入框"
+            v-model="readonlyInput"
             placeholder="只读的输入框"
             readonly
           />

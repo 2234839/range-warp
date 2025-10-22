@@ -7,6 +7,9 @@
 export { default as BaseButton } from './BaseButton.vue';
 export { default as BaseInput } from './BaseInput.vue';
 
+// 布局组件
+export { default as AppCard } from './AppCard.vue';
+
 // 业务组件
 export { default as RangeForm } from './RangeForm.vue';
 export { default as RangeWrap } from './RangeWrap.vue';
