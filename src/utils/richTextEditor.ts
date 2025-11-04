@@ -60,17 +60,55 @@ export function getAllTextNodes(container: HTMLElement): Text[] {
   return textNodes;
 }
 
+/** 获取包含换行符的文本内容 */
+export function getTextContentWithLineBreaks(container: HTMLElement): string {
+  let text = '';
+  const walker = document.createTreeWalker(
+    container,
+    NodeFilter.SHOW_ALL,
+    null,
+  );
+
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent || '';
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as Element;
+      // 处理换行标签
+      if (element.tagName === 'BR') {
+        text += '\n';
+      }
+      // 处理块级元素，在前面添加换行（除了第一个）
+      else if (
+        ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE'].includes(
+          element.tagName,
+        )
+      ) {
+        // 检查是否是容器的第一个子元素
+        if (element.parentNode === container && element !== container.firstElementChild) {
+          text += '\n';
+        }
+        // 检查是否是前一个兄弟也是块级元素
+        else if (element.previousElementSibling &&
+                 ['DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE'].includes(
+                   element.previousElementSibling.tagName
+                 )) {
+          text += '\n';
+        }
+      }
+    }
+  }
+  return text;
+}
+
 /** 查找文本中所有匹配项的位置 */
 export function findTextOccurrences(
   container: HTMLElement,
   searchText: string,
   sourceText?: string,
 ): Array<{ start: number; end: number }> {
-  const text =
-    sourceText ||
-    getAllTextNodes(container)
-      .map((n) => n.textContent || '')
-      .join('');
+  const text = sourceText || getTextContentWithLineBreaks(container);
   const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
   const matches = [];
   let match;

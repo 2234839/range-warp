@@ -4,6 +4,7 @@
     formatTextRange,
     unwrapElementsByTag,
     checkSelectionHasFormat,
+    getTextContentWithLineBreaks,
   } from '../utils/richTextEditor';
 
   const editDiv = useTemplateRef('editDiv');
@@ -22,6 +23,9 @@
     start: 0,
     end: 0,
   });
+
+  /** 当前选中的文本内容 */
+  const selectedText = ref('');
 
   /** 组件事件定义 */
   interface Emits {
@@ -157,6 +161,7 @@
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       selectedRange.value = { start: 0, end: 0 };
+      selectedText.value = '';
       emit('selectionChange', 0, 0);
       return;
     }
@@ -164,18 +169,29 @@
     const range = selection.getRangeAt(0);
     if (range.collapsed) {
       selectedRange.value = { start: 0, end: 0 };
+      selectedText.value = '';
       emit('selectionChange', 0, 0);
       return;
     }
 
-    // 计算选区的文本位置
+    // 计算选区的文本位置 - 使用包含换行符的方法
     const preSelectionRange = range.cloneRange();
     preSelectionRange.selectNodeContents(editDiv.value);
     preSelectionRange.setEnd(range.startContainer, range.startOffset);
-    const start = preSelectionRange.toString().length;
-    const end = start + range.toString().length;
+
+    // 创建临时div来计算准确的文本位置
+    const tempDiv = document.createElement('div');
+    tempDiv.appendChild(preSelectionRange.cloneContents());
+    const start = getTextContentWithLineBreaks(tempDiv).length;
+
+    // 计算选中内容的长度
+    const selectedDiv = document.createElement('div');
+    selectedDiv.appendChild(range.cloneContents());
+    const selectedLength = getTextContentWithLineBreaks(selectedDiv).length;
+    const end = start + selectedLength;
 
     selectedRange.value = { start, end };
+    selectedText.value = getTextContentWithLineBreaks(selectedDiv);
     emit('selectionChange', start, end);
   }
 
@@ -324,6 +340,13 @@
       @keyup="handleSelectionChange"
       class="p-4 min-h-[200px] outline-none leading-relaxed text-sm whitespace-pre-wrap break-words focus:bg-gray-50/50">
       测试文本 测试中
+    </div>
+
+    <!-- 选中范围信息显示区域 -->
+    <div
+      v-if="selectedRange.start !== selectedRange.end"
+      class="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-600">
+      选中: "{{ selectedText }}" ({{ selectedRange.start }}-{{ selectedRange.end }}, 长度: {{ selectedRange.end - selectedRange.start }})
     </div>
   </div>
 </template>
