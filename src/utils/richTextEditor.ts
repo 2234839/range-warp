@@ -3,6 +3,17 @@
  * 提供基于文本位置的 DOM 操作功能
  */
 
+/** 获取 Unicode 字符的正确长度 */
+export function getUnicodeStringLength(str: string): number {
+  return Array.from(str).length;
+}
+
+/** 根据 Unicode 字符索引获取字符串中的实际字节位置 */
+export function getUtf16Offset(str: string, unicodeIndex: number): number {
+  const chars = Array.from(str);
+  return chars.slice(0, unicodeIndex).join('').length;
+}
+
 /** 通用的文本替换方法 - 核心抽象函数 */
 export function replaceTextWithElement(
   container: HTMLElement,
@@ -102,22 +113,43 @@ export function getTextContentWithLineBreaks(container: HTMLElement): string {
   return text;
 }
 
-/** 查找文本中所有匹配项的位置 */
+/** 获取文本内容和 Unicode 字符长度映射 */
+export function getTextContentWithUnicodeLength(container: HTMLElement): { text: string; unicodeLength: number } {
+  const text = getTextContentWithLineBreaks(container);
+  return {
+    text,
+    unicodeLength: getUnicodeStringLength(text)
+  };
+}
+
+/** 查找文本中所有匹配项的位置 - 支持 Unicode 字符 */
 export function findTextOccurrences(
   container: HTMLElement,
   searchText: string,
   sourceText?: string,
 ): Array<{ start: number; end: number }> {
   const text = sourceText || getTextContentWithLineBreaks(container);
-  const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+  const textChars = Array.from(text);
+  const searchChars = Array.from(searchText);
+
   const matches = [];
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    matches.push({
-      start: match.index,
-      end: match.index + match[0].length,
-    });
+
+  for (let i = 0; i <= textChars.length - searchChars.length; i++) {
+    let found = true;
+    for (let j = 0; j < searchChars.length; j++) {
+      if (textChars[i + j] !== searchChars[j]) {
+        found = false;
+        break;
+      }
+    }
+    if (found) {
+      matches.push({
+        start: i,
+        end: i + searchChars.length,
+      });
+    }
   }
+
   return matches;
 }
 
@@ -133,7 +165,7 @@ export function formatTextRange(
   });
 }
 
-/** 在 container 中创建基于文本位置的精确范围 */
+/** 在 container 中创建基于文本位置的精确范围 - 支持 Unicode */
 export function createRangeFromTextPositions(
   container: HTMLElement,
   start: number,
@@ -151,16 +183,19 @@ export function createRangeFromTextPositions(
 
   for (const node of textNodes) {
     const text = node.textContent || '';
-    const nodeEnd = currentPos + text.length;
+    const textChars = Array.from(text);
+    const nodeEnd = currentPos + textChars.length;
 
     if (!startNode && start < nodeEnd) {
       startNode = node;
-      startOffset = start - currentPos;
+      // 计算在 UTF-16 字符串中的偏移量
+      startOffset = getUtf16Offset(text, start - currentPos);
     }
 
     if (!endNode && end <= nodeEnd) {
       endNode = node;
-      endOffset = end - currentPos;
+      // 计算在 UTF-16 字符串中的偏移量
+      endOffset = getUtf16Offset(text, end - currentPos);
       break;
     }
 
@@ -220,7 +255,7 @@ export function clearHighlights(
   container.normalize();
 }
 
-/** 通用的解包方法 - 直接移除与选区相交的格式标签 */
+/** 通用的解包方法 - 直接移除与选区相交的格式标签 - 支持 Unicode */
 export function unwrapElementsByTag(
   container: HTMLElement,
   start: number,
@@ -240,8 +275,12 @@ export function unwrapElementsByTag(
       const preRange = document.createRange();
       preRange.selectNodeContents(container);
       preRange.setEnd(elementRange.startContainer, elementRange.startOffset);
-      const elementStart = preRange.toString().length;
-      const elementEnd = elementStart + elementRange.toString().length;
+
+      // 使用 Unicode 字符计算
+      const beforeText = preRange.toString();
+      const elementText = elementRange.toString();
+      const elementStart = getUnicodeStringLength(beforeText);
+      const elementEnd = elementStart + getUnicodeStringLength(elementText);
 
       // 检查元素是否与选区相交
       if (elementStart < end && elementEnd > start) {
@@ -261,7 +300,7 @@ export function unwrapElementsByTag(
   }
 }
 
-/** 检查指定文本范围内是否包含指定格式的标签 */
+/** 检查指定文本范围内是否包含指定格式的标签 - 支持 Unicode */
 export function checkSelectionHasFormat(
   container: HTMLElement,
   start: number,
@@ -281,8 +320,12 @@ export function checkSelectionHasFormat(
       const preRange = document.createRange();
       preRange.selectNodeContents(container);
       preRange.setEnd(elementRange.startContainer, elementRange.startOffset);
-      const elementStart = preRange.toString().length;
-      const elementEnd = elementStart + elementRange.toString().length;
+
+      // 使用 Unicode 字符计算
+      const beforeText = preRange.toString();
+      const elementText = elementRange.toString();
+      const elementStart = getUnicodeStringLength(beforeText);
+      const elementEnd = elementStart + getUnicodeStringLength(elementText);
 
       // 检查元素是否与选区有交集
       if (elementStart < end && elementEnd > start) {

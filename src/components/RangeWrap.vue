@@ -69,13 +69,13 @@
         return;
     }
 
-    // 计算选区的文本位置
+    // 计算选区的文本位置 - 使用 Unicode 字符计算
     const preSelectionRange = range.cloneRange();
     preSelectionRange.selectNodeContents(editDiv.value);
     preSelectionRange.setEnd(range.startContainer, range.startOffset);
-    const start = preSelectionRange.toString().length;
+    const start = Array.from(preSelectionRange.toString()).length;
 
-    const end = start + range.toString().length;
+    const end = start + Array.from(range.toString()).length;
 
     // 检查选区内是否已存在对应的格式
     const isFormatted = checkSelectionHasFormat(editDiv.value, start, end, tagName);
@@ -182,16 +182,18 @@
     // 创建临时div来计算准确的文本位置
     const tempDiv = document.createElement('div');
     tempDiv.appendChild(preSelectionRange.cloneContents());
-    const start = getTextContentWithLineBreaks(tempDiv).length;
+    const startText = getTextContentWithLineBreaks(tempDiv);
+    const start = Array.from(startText).length;
 
     // 计算选中内容的长度
     const selectedDiv = document.createElement('div');
     selectedDiv.appendChild(range.cloneContents());
-    const selectedLength = getTextContentWithLineBreaks(selectedDiv).length;
+    const selectedTextContent = getTextContentWithLineBreaks(selectedDiv);
+    const selectedLength = Array.from(selectedTextContent).length;
     const end = start + selectedLength;
 
     selectedRange.value = { start, end };
-    selectedText.value = getTextContentWithLineBreaks(selectedDiv);
+    selectedText.value = selectedTextContent;
     emit('selectionChange', start, end);
   }
 
@@ -346,7 +348,7 @@
     <div
       v-if="selectedRange.start !== selectedRange.end"
       class="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-600">
-      选中: "{{ selectedText }}" ({{ selectedRange.start }}-{{ selectedRange.end }}, 长度: {{ selectedRange.end - selectedRange.start }})
+      选中: "{{ selectedText }}" ({{ selectedRange.start }}-{{ selectedRange.end }}, 长度: {{ selectedRange.end - selectedRange.start }}, Unicode长度: {{ Array.from(selectedText).length }})
     </div>
   </div>
 </template>
