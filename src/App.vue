@@ -115,12 +115,8 @@
   /** 当前激活的 Tab */
   const activeTab = ref<'info' | 'bookmarks' | 'revisions'>('info');
 
-  /** 当前选中的文本范围 */
-  const selectedRange = ref({
-    start: 0,
-    end: 0,
-    text: '',
-  });
+  /** 当前选中的文本范围 - 使用编辑器内部的持久化选区 */
+  const selectedRange = computed(() => editorRef.value?.currentSelection || { start: 0, end: 0, text: '' });
 
   /** 书签列表 */
   const bookmarks = ref<Array<{ id: string; name: string; createTime: number }>>([]);
@@ -136,11 +132,6 @@
 
   /** 选中的原始文本 */
   const selectedOriginalText = computed(() => selectedRange.value.text);
-
-  /** 处理编辑器选择变化 */
-  const handleSelectionChange = (start: number, end: number, text: string) => {
-    selectedRange.value = { start, end, text };
-  };
 
   /** 刷新书签列表 */
   const refreshBookmarks = () => {
@@ -392,7 +383,7 @@
           </div>
 
           <!-- 中间：富文本编辑器 -->
-          <EditorCore ref="editorRef" :model-value="editorContent" @selection-change="handleSelectionChange"
+          <EditorCore ref="editorRef" :model-value="editorContent"
             @update:model-value="(html) => { editorContent = html; triggerSave(html); }" />
 
           <!-- 右侧：信息面板 -->

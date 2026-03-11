@@ -40,6 +40,13 @@
     text: '',
   });
 
+  /** 持久化的选区信息 */
+  const persistentSelection = ref<{
+    start: number;
+    end: number;
+    text: string;
+  } | null>(null);
+
   /** 格式状态 */
   const formatState = ref({
     bold: false,
@@ -74,28 +81,24 @@
   });
 
   /**
-   * 处理选区变化
+   * 处理选区变化 - 只更新持久化选区
    */
   function handleSelectionChange() {
     if (!editorContainer.value) return;
 
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
-      currentSelection.value = { start: 0, end: 0, text: '' };
-      formatState.value = {
-        bold: false,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        highlight: false,
-      };
       return;
     }
 
     const range = selection.getRangeAt(0);
+
+    // 检查选区是否在编辑器内
+    if (!editorContainer.value.contains(range.commonAncestorContainer)) {
+      return;
+    }
+
     if (range.collapsed) {
-      currentSelection.value = { start: 0, end: 0, text: '' };
-      emit('selectionChange', 0, 0, '');
       return;
     }
 
@@ -109,7 +112,16 @@
     const text = range.toString();
     const end = start + Array.from(text).length;
 
+    // 更新持久化选区
+    persistentSelection.value = { start, end, text };
     currentSelection.value = { start, end, text };
+
+    // 使用 CSS Custom Highlight API 高亮选区
+    if (CSS.highlights) {
+      const highlightRange = range.cloneRange();
+      const highlight = new Highlight(highlightRange);
+      CSS.highlights.set('editor-selection', highlight);
+    }
 
     // 更新格式状态
     updateFormatState();
@@ -321,5 +333,11 @@
 button:focus-visible {
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
+}
+
+/* 选区高亮样式 - 使用 CSS Custom Highlight API */
+::highlight(editor-selection) {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-bottom: 2px solid #3b82f6;
 }
 </style>
