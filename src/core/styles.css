@@ -1,0 +1,96 @@
+/**
+ * Range-Warp 核心样式
+ *
+ * 包含书签和修订的默认样式
+ */
+
+/* ========== 书签样式 ========== */
+.bookmark {
+  background-color: #fef3c7;
+  border-bottom: 2px solid #f59e0b;
+  padding: 2px 4px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.bookmark:hover {
+  background-color: #fde68a;
+  border-bottom-color: #d97706;
+}
+
+/* ========== 修订样式 ========== */
+
+/* 插入修订 */
+.revision-insert {
+  background-color: #dcfce7;
+  border-bottom: 2px solid #22c55e;
+  padding: 2px 4px;
+  border-radius: 2px;
+  transition: background-color 0.2s;
+}
+
+.revision-insert:hover {
+  background-color: #bbf7d0;
+}
+
+/* 删除修订 */
+.revision-delete {
+  background-color: #fee2e2;
+  text-decoration: line-through;
+  padding: 2px 4px;
+  border-radius: 2px;
+  transition: background-color 0.2s;
+}
+
+.revision-delete:hover {
+  background-color: #fecaca;
+}
+
+.revision-delete del {
+  text-decoration: line-through;
+  color: #ef4444;
+}
+
+/* ========== 文本格式样式 ========== */
+strong,
+b {
+  font-weight: bold;
+}
+
+em,
+i {
+  font-style: italic;
+}
+
+u {
+  text-decoration: underline;
+}
+
+s,
+strike {
+  text-decoration: line-through;
+}
+
+mark {
+  background-color: #fef08a;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+/* ========== 高亮样式 ========== */
+.highlight {
+  background-color: #fef08a;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+/* ========== 焦点样式 ========== */
+[contenteditable]:focus {
+  outline: none;
+}
+
+button:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
