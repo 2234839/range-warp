@@ -63,9 +63,10 @@ export interface IRangeAdapter {
    * 移除指定范围的元素包裹，保留文本内容
    * @param start 起始字符下标
    * @param end 结束字符下标
-   * @param tagName 要移除的标签名
+   * @param selector CSS 选择器 (可以是标签名或带属性的选择器)
+   * @param style 可选的样式名称,用于精确匹配
    */
-  unwrapElement(start: number, end: number, tagName: string): void;
+  unwrapElement(start: number, end: number, selector: string, style?: string): void;
 
   /**
    * 高亮显示指定范围
@@ -101,4 +102,17 @@ export interface IRangeAdapter {
    * @returns HTMLElement
    */
   getContainer(): HTMLElement;
+
+  /**
+   * 规范化指定范围内的标签结构
+   *
+   * 规范化规则:
+   * 1. 移除冗余的嵌套标签 (如 <strong><strong>text</strong></strong>)
+   * 2. 合并相邻的相同标签
+   * 3. 移除空标签
+   *
+   * @param start 起始字符下标
+   * @param end 结束字符下标
+   */
+  normalize(start: number, end: number): void;
 }

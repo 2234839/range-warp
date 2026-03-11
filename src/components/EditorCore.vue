@@ -168,15 +168,26 @@
     const { start, end } = currentSelection.value;
     if (start === end) return;
 
-    console.log('[EditorCore] 应用样式:', { style, start, end, text: currentSelection.value.text });
+    console.log('[EditorCore] 应用样式前:', {
+      style,
+      start,
+      end,
+      text: currentSelection.value.text,
+      formatState: { ...formatState.value }
+    });
+
     editor.value.applyStyle(start, end, style);
 
+    const newHTML = getHTML();
+    console.log('[EditorCore] 应用样式后 HTML:', newHTML.substring(0, 200));
+
     // 触发内容更新事件
-    emit('update:modelValue', getHTML());
+    emit('update:modelValue', newHTML);
 
     // 更新格式状态
     setTimeout(() => {
       updateFormatState();
+      console.log('[EditorCore] 应用样式后格式状态:', { ...formatState.value });
     }, 0);
   }
 
@@ -189,14 +200,71 @@
     const { start, end } = currentSelection.value;
     if (start === end) return;
 
+    console.log('[EditorCore] 移除样式前:', {
+      style,
+      start,
+      end,
+      text: currentSelection.value.text,
+      formatState: { ...formatState.value }
+    });
+
     editor.value.removeStyle(start, end, style);
 
+    const newHTML = getHTML();
+    console.log('[EditorCore] 移除样式后 HTML:', newHTML.substring(0, 200));
+
     // 触发内容更新事件
-    emit('update:modelValue', getHTML());
+    emit('update:modelValue', newHTML);
 
     setTimeout(() => {
       updateFormatState();
+      console.log('[EditorCore] 移除样式后格式状态:', { ...formatState.value });
     }, 0);
+  }
+
+  /**
+   * 切换样式（根据当前状态决定应用或移除）
+   */
+  function toggleStyle(style: string) {
+    const currentState = formatState.value[style as keyof typeof formatState.value];
+
+    console.log('[EditorCore] 切换样式:', {
+      style,
+      currentState,
+      will: currentState ? '移除' : '应用',
+      persistentSelection: persistentSelection.value
+    });
+
+    if (currentState) {
+      // 当前有样式，则移除
+      removeStyle(style);
+    } else {
+      // 当前无样式，则应用
+      applyStyle(style);
+    }
+
+    // 样式操作后，恢复编辑器焦点并尝试恢复选区
+    if (editorContainer.value) {
+      editorContainer.value.focus();
+
+      // 尝试根据持久化选区恢复原生选区
+      if (persistentSelection.value) {
+        restoreNativeSelection();
+      }
+    }
+  }
+
+  /**
+   * 根据持久化选区恢复原生选区
+   */
+  function restoreNativeSelection() {
+    if (!editorContainer.value || !persistentSelection.value || !editor.value) return;
+
+    const { start, end } = persistentSelection.value;
+
+    // 使用编辑器创建 Range 并选中
+    const range = editor.value.createRange(start, end);
+    range.select();
   }
 
   /**
@@ -241,7 +309,7 @@
     <div class="flex items-center p-2 bg-gray-50 border-b border-gray-200 gap-1">
       <!-- 格式化按钮组 -->
       <button
-        @click="applyStyle('bold')"
+        @click="toggleStyle('bold')"
         :class="[
           'p-2 border rounded text-sm font-bold min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
           formatState.bold
@@ -253,7 +321,7 @@
       </button>
 
       <button
-        @click="applyStyle('italic')"
+        @click="toggleStyle('italic')"
         :class="[
           'p-2 border rounded text-sm italic min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
           formatState.italic
@@ -265,7 +333,7 @@
       </button>
 
       <button
-        @click="applyStyle('underline')"
+        @click="toggleStyle('underline')"
         :class="[
           'p-2 border rounded text-sm underline min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
           formatState.underline
@@ -277,7 +345,7 @@
       </button>
 
       <button
-        @click="applyStyle('strikethrough')"
+        @click="toggleStyle('strikethrough')"
         :class="[
           'p-2 border rounded text-sm line-through min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
           formatState.strikethrough
@@ -293,7 +361,7 @@
 
       <!-- 高亮按钮 -->
       <button
-        @click="applyStyle('highlight')"
+        @click="toggleStyle('highlight')"
         :class="[
           'p-2 border rounded text-sm min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
           formatState.highlight
