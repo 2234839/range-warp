@@ -1,5 +1,6 @@
 <script setup lang="ts">
-  import { ref, onMounted, onUnmounted, useTemplateRef, computed } from 'vue';
+  import { ref, onMounted, useTemplateRef } from 'vue';
+  import { useEventListener } from '@vueuse/core';
   import { Editor, DOMRangeAdapter } from '../core/index';
   import type { Editor as EditorType } from '../core/index';
 
@@ -69,14 +70,7 @@
     }
 
     // 监听选区变化
-    document.addEventListener('selectionchange', handleSelectionChange);
-  });
-
-  /**
-   * 清理
-   */
-  onUnmounted(() => {
-    document.removeEventListener('selectionchange', handleSelectionChange);
+    useEventListener(document, 'selectionchange', handleSelectionChange);
   });
 
   /**
@@ -125,6 +119,13 @@
   }
 
   /**
+   * 处理输入事件
+   */
+  function handleInput() {
+    emit('update:modelValue', getHTML());
+  }
+
+  /**
    * 更新格式状态 - 使用编辑器 API
    */
   function updateFormatState() {
@@ -155,7 +156,11 @@
     const { start, end } = currentSelection.value;
     if (start === end) return;
 
+    console.log('[EditorCore] 应用样式:', { style, start, end, text: currentSelection.value.text });
     editor.value.applyStyle(start, end, style);
+
+    // 触发内容更新事件
+    emit('update:modelValue', getHTML());
 
     // 更新格式状态
     setTimeout(() => {
@@ -173,6 +178,9 @@
     if (start === end) return;
 
     editor.value.removeStyle(start, end, style);
+
+    // 触发内容更新事件
+    emit('update:modelValue', getHTML());
 
     setTimeout(() => {
       updateFormatState();
@@ -290,7 +298,7 @@
       ref="editorContainer"
       contenteditable="true"
       class="p-4 min-h-[300px] outline-none leading-relaxed text-sm whitespace-pre-wrap break-words focus:bg-gray-50/50"
-      @input="emit('update:modelValue', getHTML())">
+      @input="handleInput">
       <slot></slot>
     </div>
 
