@@ -1,81 +1,187 @@
-# Range-Warp 架构重构文档
+# Range-Warp 架构文档
 
-## 📋 概述
+## 概述
 
-Range-Warp 是一个基于 DOM Range API 的富文本编辑器框架，采用**依赖倒置原则**和**适配器模式**设计，实现了编辑器无关的书签和修订功能。
+Range-Warp 是一个基于 DOM Range API 的富文本编辑器框架，采用**适配器模式**和**依赖倒置原则**设计，实现了编辑器无关的书签和修订功能。
 
-## 🎯 设计目标
+核心设计理念：**模型层和服务层完全不知道编辑器的存在，一切操作通过 `IRangeAdapter` 接口完成。**
 
-1. **编辑器无关**: 核心逻辑不依赖任何特定的富文本编辑器
-2. **基于标准**: 使用原生 DOM Range API，提供准确的文本位置计算
-3. **可扩展性**: 分层架构，易于扩展新功能
-4. **可测试性**: 核心逻辑可独立测试
-
-## 🏗️ 架构设计
-
-### 四层架构模型
+## 五层架构
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  应用层 (Application Layer)                              │
-│                                                         │
-│  Editor: 提供业务级功能                                  │
-│  - 智能文本替换（自动创建修订）                           │
-│  - 批量修订操作                                          │
-│  - 书签和修订的统一管理                                  │
-└─────────────────────────────────────────────────────────┘
-                          ▲
-                          │ 调用
-┌─────────────────────────────────────────────────────────┐
-│  服务层 (Service Layer)                                  │
-│                                                         │
-│  BookmarkService: 书签管理服务                           │
-│  RevisionService: 修订管理服务                           │
-└─────────────────────────────────────────────────────────┘
-                          ▲
-                          │ 调用
-┌─────────────────────────────────────────────────────────┐
-│  模型层 (Model Layer)                                    │
-│                                                         │
-│  Range: 文本选区抽象                                     │
-│  Bookmark: 书签数据模型                                  │
-│  Revision: 修订数据模型                                  │
-└─────────────────────────────────────────────────────────┘
-                          ▲
-                          │ 调用
-┌─────────────────────────────────────────────────────────┐
-│  适配器层 (Adapter Layer)                                │
-│                                                         │
-│  IRangeAdapter: 统一接口定义                             │
-│  DOMRangeAdapter: 基于 DOM Range API 的实现              │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  集成层 (Integration Layer)                                  │
+│                                                             │
+│  useNativeEditor   useUEditorPlus   (可扩展更多 composable)  │
+│  - 容器发现        - 脚本加载                                 │
+│  - 生命周期管理    - 异步初始化                               │
+│  - 事件绑定        - iframe 适配                               │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          │ 创建 IRangeAdapter 实例
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  应用层 (Application Layer)                                  │
+│                                                             │
+│  Editor: 统一的业务级 API                                    │
+│  - 样式操作、书签、修订、文本替换等                           │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  服务层 (Service Layer)                                      │
+│                                                             │
+│  BookmarkService: 书签管理（CRUD + 跳转）                    │
+│  RevisionService: 修订管理（创建/接受/拒绝/部分解决）        │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  模型层 (Model Layer)                                        │
+│                                                             │
+│  Range: 文本选区抽象                                         │
+│  Bookmark: 书签数据模型                                      │
+│  Revision: 修订数据模型                                       │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  适配器层 (Adapter Layer)                                    │
+│                                                             │
+│  IRangeAdapter: 统一接口定义（30+ 方法）                     │
+│  DOMRangeAdapter: 基于 DOM Range API 的实现                  │
+│  ContainerTagConfig: 容器标签配置系统                         │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  DOM (浏览器原生)                                            │
+│                                                             │
+│  contenteditable div / iframe body                           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 核心设计模式
+## 跨编辑器集成
 
-#### 1. 依赖倒置原则 (DIP)
+### 核心原理
 
-高层模块（Editor、BookmarkService）依赖抽象接口（IRangeAdapter），而非具体实现。
+`DOMRangeAdapter` 只需要两个输入：
 
-**好处**：
-- ✅ 切换适配器不需要修改上层代码
-- ✅ 可以同时支持多种编辑器
-- ✅ 便于单元测试
+```typescript
+const adapter = new DOMRangeAdapter({
+  container: HTMLElement,    // 编辑器的可编辑区域
+  ownerWindow?: Window,      // iframe 场景传入 iframe.contentWindow
+});
+```
 
-#### 2. 适配器模式 (Adapter Pattern)
+只要能拿到这两个信息，所有功能（样式、书签、修订、选区）立即可用。
 
-将不同编辑器的差异性 API 转换为统一接口。
+### 已验证的编辑器
 
-当前实现：
-- **DOMRangeAdapter**: 基于原生 DOM Range API，适用于所有 contenteditable 的编辑器
+| 编辑器 | 容器获取方式 | 特殊处理 |
+|--------|-------------|---------|
+| 原生 contenteditable | 直接使用 div 本身 | 无 |
+| UEditor Plus | `ue.body`（iframe 的 body） | iframe 脚本加载、样式注入 |
 
-未来可扩展：
-- **QuillAdapter**: 适配 Quill 编辑器
-- **ProseMirrorAdapter**: 适配 ProseMirror 编辑器
+### 集成新编辑器只需一个 composable
 
-#### 3. DOM 元素包裹原理
+以 UEditor Plus 为例，`useUEditorPlus.ts` 封装了：
+- 容器发现（如何拿到可编辑区域的 HTMLElement）
+- 生命周期（异步脚本加载、`ready()` 回调、销毁）
+- 内容同步（`getContent()` / `setContent()`）
+- 事件绑定（`contentchange`、`focus`、`selectionchange`）
 
-书签和修订直接包裹在 DOM 元素中：
+composable 返回统一接口：
+
+```typescript
+{
+  editor,           // Ref<Editor | null>
+  selectionContext,  // Ref<{ ownerWindow: Window, container: HTMLElement | null }>
+  init(content?),   // 初始化
+  destroy(),        // 销毁
+  getHTML(),        // 获取内容
+  setHTML(html),    // 设置内容
+}
+```
+
+`EditorCore.vue` 通过此接口同时驱动原生模式和 UEditor Plus 模式，模式切换时 `:key` 重建组件。
+
+## 容器配置系统
+
+### 设计原理
+
+书签、修订、高亮等语义标记统一通过**容器配置系统**管理，而非直接创建 DOM 元素：
+
+```typescript
+// 1. 注册容器配置（告诉适配器这类元素长什么样）
+adapter.registerContainerConfig('bookmark', {
+  tagName: 'span',
+  attributeSelector: '.bookmark',
+  display: 'inline',
+  crossBlock: 'split',        // 跨块级元素时拆分
+  idAttribute: 'data-bookmark-id',
+  splitRepair: 'fill-gaps',   // 编辑导致间隙时自动修复
+  copyable: false,             // 复制时不保留标签
+});
+
+// 2. 通过配置创建元素（适配器保证在正确的 document 中创建）
+adapter.createConfigElement('bookmark', {
+  'data-bookmark-id': 'bm-001',
+  'data-bookmark-name': '重要段落',
+});
+```
+
+### 已注册的容器配置
+
+| 配置名 | 标签 | 选择器 | 用途 |
+|--------|------|--------|------|
+| `bold` | strong | - | 加粗样式 |
+| `italic` | em | - | 斜体样式 |
+| `underline` | u | - | 下划线样式 |
+| `strikethrough` | s | - | 删除线样式 |
+| `highlight` | mark | - | 高亮样式 |
+| `bookmark` | span | .bookmark | 书签标记 |
+| `revision-insert` | span | .revision-insert | 插入修订 |
+| `revision-delete` | span | .revision-delete | 删除修订 |
+
+### 配置系统的设计参考
+
+参考 ProseMirror 的 MarkSpec 设计：
+- 配置只描述容器是什么（tagName、attributeSelector）
+- 包裹行为由调用方的 `WrapOptions`（nest/wrap）决定
+- `mergeAdjacent` 控制同类容器是否自动合并
+
+## 跨 iframe 兼容
+
+当编辑器在 iframe 中运行时（如 UEditor Plus），需要处理以下问题：
+
+| 问题 | 解决方案 |
+|------|---------|
+| `document.createElement` 创建错误 document 的元素 | 所有 DOM 操作使用 `ownerDocument` |
+| `window.getSelection()` 返回主窗口选区 | 使用 `ownerWindow.getSelection()` |
+| 主文档 CSS 不穿透 iframe | 构造函数自动注入语义元素 CSS |
+| `instanceof Text/Element` 对 iframe 节点返回 false | 使用 `node.nodeType` 数值比较 |
+| `document.createRange()` 创建错误 Range | 使用 `ownerDocument.createRange()` |
+
+`DOMRangeAdapter` 构造函数自动检测 iframe 场景并注入样式：
+
+```typescript
+constructor({ container, ownerWindow }) {
+  this._ownerWindow = ownerWindow ?? window;
+  this._doc = this._ownerWindow.document;
+
+  // iframe 场景下注入样式
+  if (this._doc !== document) {
+    const style = this._doc.createElement('style');
+    style.textContent = INJECTABLE_STYLES;
+    this._doc.head.appendChild(style);
+  }
+}
+```
+
+## DOM 元素包裹原理
+
+书签和修订以 DOM 元素包裹文本，自动跟随用户编辑：
 
 ```html
 <!-- 书签 -->
@@ -90,318 +196,65 @@ Range-Warp 是一个基于 DOM Range API 的富文本编辑器框架，采用**�
 
 <!-- 删除修订 -->
 <span class="revision-delete" data-revision-id="rev-002" data-revision-author="李四">
-  <del>这是被删除的文本</del>
+  这是待删除的文本
 </span>
 ```
 
-**优势**：
-- ✅ 自动跟随用户编辑
-- ✅ 直接序列化为 HTML
-- ✅ 天然支持嵌套
-- ✅ 通过 CSS 控制样式
+优势：
+- 自动跟随用户编辑（文本位置随编辑自动变化）
+- 直接序列化为 HTML（无需额外的数据存储）
+- 天然支持嵌套（如 `<strong>` 内的修订）
+- 通过 CSS 控制样式
 
-## 📦 核心模块说明
-
-### 1. 适配器层
-
-#### IRangeAdapter 接口
-
-定义了统一的文本操作接口：
-
-```typescript
-interface IRangeAdapter {
-  getText(start: number, end: number): string;
-  insertText(position: number, text: string): void;
-  delete(start: number, end: number): void;
-  replaceText(start: number, end: number, text: string): void;
-  setStyle(start: number, end: number, style: string): void;
-  removeStyle(start: number, end: number, style: string): void;
-  wrapElement(start: number, end: number, elementCreator: () => Element): void;
-  unwrapElement(start: number, end: number, tagName: string): void;
-  select(start: number, end: number): void;
-  getDocumentLength(): number;
-  findText(searchText: string): Array<{ start: number; end: number }>;
-  hasStyle(start: number, end: number, tagName: string): boolean;
-  getContainer(): HTMLElement;
-}
-```
-
-#### DOMRangeAdapter 实现
-
-基于原生 DOM Range API 的实现，特点：
-- 支持 Unicode 字符下标计算
-- 提供准确的跨元素文本位置定位
-- 无需依赖任何第三方库
-
-### 2. 模型层
-
-#### Range 类
-
-文本选区的抽象表示：
-
-```typescript
-const range = editor.createRange(0, 10);
-range.getText();      // 获取选区文本
-range.setStyle('bold');  // 应用样式
-range.delete();        // 删除选区内容
-```
-
-#### Bookmark 类
-
-书签数据模型：
-
-```typescript
-// 创建书签
-const bookmark = editor.createBookmark({
-  name: '重要段落',
-  start: 0,
-  end: 100,
-  author: '张三'
-});
-
-// 跳转到书签
-bookmark.goto();
-
-// 删除书签
-bookmark.remove();
-```
-
-#### Revision 类
-
-修订数据模型：
-
-```typescript
-// 创建插入修订
-const insertRevision = editor.revisions.createInsert({
-  range: editor.createRange(0, 10),
-  author: '张三',
-  comment: '补充说明'
-});
-
-// 创建删除修订
-const deleteRevision = editor.revisions.createDelete({
-  range: editor.createRange(10, 20),
-  author: '李四'
-});
-
-// 接受修订
-revision.accept();
-
-// 拒绝修订
-revision.reject();
-```
-
-### 3. 服务层
-
-#### BookmarkService
-
-提供书签的完整生命周期管理：
-
-```typescript
-// 查询书签
-const bookmarks = editor.bookmarks.query({
-  name: '重要段落',
-  author: '张三'
-});
-
-// 删除书签
-editor.bookmarks.deleteById('bm-001');
-
-// 跳转到书签
-editor.bookmarks.goto('bm-001');
-```
-
-#### RevisionService
-
-提供修订的批量操作：
-
-```typescript
-// 批量接受指定范围内的修订
-const count = editor.revisions.acceptInRange(0, 100);
-
-// 批量接受所有修订
-editor.revisions.acceptAll();
-
-// 查询修订
-const revisions = editor.revisions.query({
-  type: RevisionType.INSERT,
-  author: '张三'
-});
-```
-
-### 4. 应用层
-
-#### Editor 类
-
-最上层的能力封装：
-
-```typescript
-const adapter = new DOMRangeAdapter({
-  container: document.getElementById('editor')
-});
-
-const editor = new Editor({
-  adapter,
-  currentUser: '张三'
-});
-
-// 智能文本替换（自动创建修订）
-editor.setText('旧文本', '新文本', {
-  asRevision: true,
-  revisionAuthor: '张三',
-  revisionComment: '优化表达'
-});
-
-// 应用样式
-editor.applyStyle(0, 10, 'bold');
-
-// 获取所有书签
-const bookmarks = editor.getAllBookmarks();
-
-// 批量接受修订
-editor.acceptRevisionsInRange(0, 100);
-```
-
-## 🎨 样式系统
-
-核心样式定义在 `src/core/styles.css`：
-
-```css
-/* 书签样式 */
-.bookmark {
-  background-color: #fef3c7;
-  border-bottom: 2px solid #f59e0b;
-}
-
-/* 插入修订 */
-.revision-insert {
-  background-color: #dcfce7;
-  border-bottom: 2px solid #22c55e;
-}
-
-/* 删除修订 */
-.revision-delete {
-  background-color: #fee2e2;
-  text-decoration: line-through;
-}
-```
-
-## 🔧 使用示例
-
-### 基础使用
-
-```vue
-<script setup>
-import { ref, onMounted } from 'vue';
-import { Editor, DOMRangeAdapter } from '@/core';
-
-const editorContainer = ref(null);
-let editor = null;
-
-onMounted(() => {
-  const adapter = new DOMRangeAdapter({
-    container: editorContainer.value
-  });
-
-  editor = new Editor({
-    adapter,
-    currentUser: '张三'
-  });
-});
-
-function createBookmark() {
-  editor.createBookmark({
-    name: '我的书签',
-    start: 0,
-    end: 10
-  });
-}
-</script>
-
-<template>
-  <div ref="editorContainer" contenteditable="true"></div>
-  <button @click="createBookmark">创建书签</button>
-</template>
-```
-
-### 高级功能
-
-```typescript
-// 智能替换，自动创建修订
-editor.setText('错误', '正确', {
-  asRevision: true,
-  revisionAuthor: '张三',
-  revisionComment: '修正错别字'
-});
-
-// 批量操作
-const count = editor.acceptRevisionsInRange(0, 100);
-
-// 查询和导航
-const bookmarks = editor.bookmarks.query({ author: '张三' });
-bookmarks[0]?.goto();
-```
-
-## 📁 目录结构
+## 目录结构
 
 ```
 src/
-├── core/                    # 核心模块
-│   ├── adapters/           # 适配器层
-│   │   ├── IRangeAdapter.ts
-│   │   └── DOMRangeAdapter.ts
-│   ├── models/             # 模型层
-│   │   ├── Range.ts
-│   │   ├── Bookmark.ts
-│   │   └── Revision.ts
-│   ├── services/           # 服务层
-│   │   ├── BookmarkService.ts
-│   │   └── RevisionService.ts
-│   ├── Editor.ts           # 应用层
-│   ├── index.ts            # 模块导出
-│   └── styles.css          # 核心样式
-├── components/             # Vue 组件
-│   └── EditorCore.vue
-├── App.vue                 # 主应用
-└── main.ts                # 入口文件
+├── core/                        # 核心模块（编辑器无关）
+│   ├── adapters/
+│   │   ├── IRangeAdapter.ts    # 适配器接口定义（30+ 方法）
+│   │   └── DOMRangeAdapter.ts  # DOM Range API 实现
+│   ├── models/
+│   │   ├── Range.ts            # 文本选区抽象
+│   │   ├── Bookmark.ts         # 书签数据模型
+│   │   └── Revision.ts         # 修订数据模型
+│   ├── services/
+│   │   ├── BookmarkService.ts  # 书签管理服务
+│   │   └── RevisionService.ts  # 修订管理服务
+│   ├── Editor.ts               # 统一业务 API
+│   ├── utils.ts                # 工具函数
+│   ├── styles.css              # 主文档语义元素样式
+│   └── index.ts                # 模块导出
+├── components/                  # Vue 组件层
+│   ├── EditorCore.vue          # 编辑器核心组件（模式无关的 UI）
+│   ├── DomTreePanel.vue        # DOM 树可视化面板
+│   ├── editor-utils.ts         # 组件共享工具
+│   ├── useNativeEditor.ts      # 原生编辑器 composable
+│   ├── useUEditorPlus.ts       # UEditor Plus composable
+│   └── ...
+└── App.vue                     # 主应用
 ```
 
-## 🚀 未来计划
+## 扩展新编辑器
 
-### Phase 1: 完善基础功能 ✅
-- [x] 实现 DOM Range 适配器
-- [x] 实现书签系统
-- [x] 实现修订系统
-- [x] 实现 Editor 业务逻辑
+集成一个新的 contenteditable 编辑器只需：
 
-### Phase 2: 增强功能
-- [ ] 实现部分接受/拒绝修订
-- [ ] 实现核稿系统集成
-- [ ] 实现 AI 润色功能
+1. 创建 `useXxxEditor.ts` composable，返回标准接口
+2. 在 `EditorCore.vue` 中注册新的模式选项
 
-### Phase 3: 扩展适配器
-- [ ] 实现 QuillAdapter
-- [ ] 实现 ProseMirrorAdapter
-- [ ] 实现 TinyMCEAdapter
+composable 内部只需封装编辑器特有的逻辑，核心功能（样式、书签、修订）通过 `DOMRangeAdapter` 直接获得。
 
-### Phase 4: 性能优化
-- [ ] 实现下标计算缓存
-- [ ] 实现虚拟滚动
-- [ ] 使用 Web Worker 优化计算
+对于非 DOM Range API 的编辑器（如 ProseMirror），需要实现 `IRangeAdapter` 接口的完全替代方案，但模型层和服务层无需任何修改。
 
-## 📚 参考资料
+## 测试
 
-- [DOM Range 规范](https://dom.spec.whatwg.org/#ranges)
-- [ContentEditable 规范](https://w3c.github.io/editing/)
-- [Peritext - 标记与文本分离的 CRDT 算法](https://www.inkandswitch.com/peritext/)
-- [ProseMirror 文档](https://prosemirror.net/)
+```bash
+# 运行适配器测试（64 个测试用例）
+pnpm tsx src/__tests__/adapter.test.ts
 
-## 📄 许可证
+# 运行修订测试（62 个测试用例）
+pnpm tsx src/__tests__/revision.test.ts
 
-MIT License
-
----
-
-**架构版本**: v1.0.0
-**最后更新**: 2026-03-11
-**维护者**: Range-Warp 团队
+# 类型检查
+pnpm tsc --noEmit
+```

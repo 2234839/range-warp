@@ -1,8 +1,7 @@
 <script setup lang="ts">
-  import { ref, computed, onMounted, onBeforeUnmount, useTemplateRef, type ComputedRef } from 'vue';
+  import { ref, computed, onMounted, onBeforeUnmount, useTemplateRef } from 'vue';
   import { useDebounceFn } from '@vueuse/core';
-  import type { Editor as EditorType } from '../core/index';
-  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition } from './editor-utils';
+  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition, type EditorComposable } from './editor-utils';
   import { useUEditorPlus } from './useUEditorPlus';
   import { useNativeEditor } from './useNativeEditor';
 
@@ -70,7 +69,7 @@
 
   /** 模式切换前保存当前内容 */
   function saveContentBeforeSwitch() {
-    emit('update:modelValue', getHTML());
+    emit('update:modelValue', active.value.getHTML());
   }
 
   /** 原生编辑器容器引用 */
@@ -97,15 +96,6 @@
 
   /** 是否为 UEditor Plus 模式 */
   const isUEditorMode = computed(() => props.mode === 'ueditor-plus');
-
-  /**
-   * 选区上下文：抽象出当前模式的 window 和 container，
-   * 使 syncSelectionFromDOM / handleCopyCut 等方法同时支持原生和 iframe
-   */
-  const selectionContext = ref<{
-    ownerWindow: Window;
-    container: HTMLElement | null;
-  }>({ ownerWindow: window, container: null });
 
   /** 原生编辑器 composable */
   const native = useNativeEditor({
@@ -136,13 +126,12 @@
   });
 
   /**
-   * 当前活跃的 Editor 实例
-   *
-   * 原生模式使用 native editor ref，UE 模式使用 ue editor ref
+   * 当前活跃的编辑器 composable（统一入口，消除业务逻辑中的模式分支）
    */
-  const activeEditor = computed(() => {
-    return isUEditorMode.value ? ue.editor.value : native.editor.value;
-  }) as ComputedRef<EditorType | null>;
+  const active = computed<EditorComposable>(() => isUEditorMode.value ? ue : native);
+
+  /** 当前活跃的 Editor 实例 */
+  const activeEditor = computed(() => active.value.editor.value);
 
   onMounted(() => {
     if (isUEditorMode.value) {
@@ -161,12 +150,7 @@
    * 从 DOM 中同步选区状态到持久化选区
    */
   function syncSelectionFromDOM() {
-    /** UE 模式下同步 composable 的 selectionContext */
-    if (isUEditorMode.value) {
-      selectionContext.value = ue.selectionContext.value;
-    }
-
-    const { ownerWindow, container } = selectionContext.value;
+    const { ownerWindow, container } = active.value.selectionContext.value;
     if (!container) return;
 
     const selection = ownerWindow.getSelection();
@@ -223,7 +207,7 @@
    * 处理输入事件（仅原生模式通过 @input 触发，UEditor 通过 contentchange 事件触发）
    */
   function handleInput() {
-    emit('update:modelValue', getHTML());
+    emit('update:modelValue', active.value.getHTML());
     debouncedRepair();
   }
 
@@ -233,7 +217,7 @@
   function handleCopyCut(event: ClipboardEvent) {
     if (!activeEditor.value) return;
 
-    const { ownerWindow, container } = selectionContext.value;
+    const { ownerWindow, container } = active.value.selectionContext.value;
     const selection = ownerWindow.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 
@@ -255,7 +239,7 @@
     /** 剪切时删除选区内容 */
     if (event.type === 'cut') {
       range.deleteContents();
-      emit('update:modelValue', getHTML());
+      emit('update:modelValue', active.value.getHTML());
       activeEditor.value.repairSplitContainers();
     }
   }
@@ -292,7 +276,7 @@
       ed.removeStyle(start, end, style);
     }
 
-    emit('update:modelValue', getHTML());
+    emit('update:modelValue', active.value.getHTML());
     requestAnimationFrame(updateFormatState);
   }
 
@@ -306,7 +290,7 @@
     setStyle(style, !formatState.value[styleKey]);
 
     /* 样式操作后，恢复编辑器焦点并尝试恢复选区 */
-    const { container } = selectionContext.value;
+    const { container } = active.value.selectionContext.value;
     if (container) {
       container.focus();
       if (persistentSelection.value) {
@@ -320,31 +304,10 @@
    */
   function restoreNativeSelection() {
     const ed = activeEditor.value;
-    const { container } = selectionContext.value;
+    const { container } = active.value.selectionContext.value;
     if (!container || !persistentSelection.value || !ed) return;
 
     ed.createRange(persistentSelection.value.start, persistentSelection.value.end).select();
-  }
-
-  /**
-   * 获取 HTML 内容
-   */
-  function getHTML(): string {
-    if (isUEditorMode.value) {
-      return ue.getHTML();
-    }
-    return native.getHTML();
-  }
-
-  /**
-   * 设置 HTML 内容
-   */
-  function setHTML(html: string) {
-    if (isUEditorMode.value) {
-      ue.setHTML(html);
-      return;
-    }
-    native.setHTML(html);
   }
 
   /**
@@ -354,22 +317,22 @@
     editor: activeEditor,
     setStyle,
     toggleStyle,
-    getHTML,
-    setHTML,
+    getHTML: () => active.value.getHTML(),
+    setHTML: (html: string) => active.value.setHTML(html),
     persistentSelection,
     currentSelection,
     formatState,
     /** 当前编辑器容器（contenteditable div 或 iframe body） */
-    container: computed(() => selectionContext.value.container),
-    /** UEditor Plus 是否就绪 */
-    ready: ue.ready,
+    container: computed(() => active.value.selectionContext.value.container),
+    /** 当前编辑器是否就绪 */
+    ready: computed(() => active.value.ready.value),
   });
 </script>
 
 <template>
   <div class="flex-1 min-w-0 border border-gray-300 rounded-lg overflow-hidden font-sans bg-white shadow-sm">
     <!-- 工具栏（始终显示，基于适配器操作） -->
-    <div @mousedown.prevent class="flex items-center p-2 bg-gray-50 border-b border-gray-200 gap-1">
+    <div @mousedown.stop.prevent class="flex items-center p-2 bg-gray-50 border-b border-gray-200 gap-1">
       <!-- 模式切换按钮 -->
       <button
         @click="saveContentBeforeSwitch(); toggleMode()"

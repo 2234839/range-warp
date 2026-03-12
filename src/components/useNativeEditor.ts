@@ -5,10 +5,11 @@
  * 与 useUEditorPlus 保持对称的接口设计
  */
 
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { Editor, DOMRangeAdapter } from '../core/index';
 import type { Editor as EditorType } from '../core/index';
+import type { EditorComposable } from './editor-utils';
 
 /** 选区上下文（原生模式） */
 interface SelectionContext {
@@ -41,11 +42,15 @@ interface UseNativeEditorOptions {
  *
  * 调用方在 onMounted 中调用 `init()` 初始化
  */
-export function useNativeEditor(options: UseNativeEditorOptions) {
+export function useNativeEditor(options: UseNativeEditorOptions): EditorComposable {
   const { containerRef, currentUser, onContentChange, onFocus, onBlur, onSelectionChange, onCopyCut, onInput } = options;
 
-  const editor = ref<EditorType | null>(null);
+  const editor = shallowRef<EditorType | null>(null);
   const selectionContext = ref<SelectionContext>({ ownerWindow: window, container: null });
+  /** 原生模式立即就绪，无需加载 */
+  const loading = ref(false);
+  const ready = ref(true);
+  const error = ref(false);
 
   /** 获取 HTML 内容 */
   function getHTML(): string {
@@ -94,6 +99,9 @@ export function useNativeEditor(options: UseNativeEditorOptions) {
   return {
     editor,
     selectionContext,
+    loading,
+    ready,
+    error,
     init,
     destroy,
     getHTML,

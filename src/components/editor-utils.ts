@@ -6,6 +6,8 @@
  * - 格式状态常量
  */
 
+import type { Ref, ShallowRef } from 'vue';
+import type { Editor as EditorType } from '../core/index';
 import { getUnicodeStringLength } from '../core/utils';
 
 /** 格式状态的类型定义 */
@@ -34,6 +36,28 @@ export const STYLE_KEYS: Record<string, keyof FormatState> = {
   strikethrough: 'strikethrough',
   highlight: 'highlight',
 };
+
+/** 编辑器 composable 统一接口 */
+export interface EditorComposable {
+  /** 编辑器实例（shallowRef 避免深层响应式解包类实例） */
+  editor: ShallowRef<EditorType | null>;
+  /** 选区上下文（window + container） */
+  selectionContext: Ref<{ ownerWindow: Window; container: HTMLElement | null }>;
+  /** 是否正在加载（原生模式始终为 false） */
+  loading: Ref<boolean>;
+  /** 是否就绪（原生模式始终为 true） */
+  ready: Ref<boolean>;
+  /** 是否加载出错（原生模式始终为 false） */
+  error: Ref<boolean>;
+  /** 初始化编辑器 */
+  init(initialContent?: string): void;
+  /** 销毁编辑器 */
+  destroy(): void;
+  /** 获取 HTML 内容 */
+  getHTML(): string;
+  /** 设置 HTML 内容 */
+  setHTML(html: string): void;
+}
 
 /**
  * 计算原生选区在容器内的 Unicode 字符位置

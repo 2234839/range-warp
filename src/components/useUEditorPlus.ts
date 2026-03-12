@@ -5,11 +5,11 @@
  * 使 EditorCore.vue 不需要关心 UEditor Plus 的内部实现细节
  */
 
-import { ref } from 'vue';
-import { nextTick } from 'vue';
+import { ref, shallowRef, nextTick } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { Editor, DOMRangeAdapter } from '../core/index';
 import type { Editor as EditorType } from '../core/index';
+import type { EditorComposable } from './editor-utils';
 
 /** 选区上下文（iframe 场景） */
 interface SelectionContext {
@@ -60,10 +60,10 @@ function loadScript(src: string): Promise<void> {
  * 调用方在 onMounted 中调用 `init()` 初始化，
  * 在 onBeforeUnmount 中调用 `destroy()` 清理
  */
-export function useUEditorPlus(options: UseUEditorPlusOptions) {
+export function useUEditorPlus(options: UseUEditorPlusOptions): EditorComposable {
   const { containerRef, currentUser, onContentChange, onFocus, onBlur, onSelectionChange, onCopyCut } = options;
 
-  const editor = ref<EditorType | null>(null);
+  const editor = shallowRef<EditorType | null>(null);
   const selectionContext = ref<SelectionContext>({ ownerWindow: window, container: null });
   const loading = ref(false);
   const ready = ref(false);
@@ -85,6 +85,22 @@ export function useUEditorPlus(options: UseUEditorPlusOptions) {
         await loadScript(`${UE_BASE}/ueditor.config.js`);
         await loadScript(`${UE_BASE}/ueditor.all.js`);
         ueScriptLoaded = true;
+      }
+
+      /**
+       * 修补 UEditor 的 domUtils.hasClass：
+       * 当 toolbars: [] 时，内部 ColorButton 的 DOM 元素为 null，
+       * closeAllPopup 触发 hasClass(null) 会报错。
+       * 脚本加载后立即修补，确保跨模式切换也有效。
+       */
+      const UE = (window as any).UE;
+      if (UE?.dom?.domUtils?.hasClass && !UE.dom.domUtils.hasClass.__patched) {
+        const original = UE.dom.domUtils.hasClass;
+        UE.dom.domUtils.hasClass = (el: Element | null, cls: string) => {
+          if (!el) return false;
+          return original(el, cls);
+        };
+        UE.dom.domUtils.hasClass.__patched = true;
       }
     } catch {
       loading.value = false;
