@@ -241,46 +241,6 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * 获取包含换行符的文本内容
    * @returns 文本内容
    */
-  /** 块级标签集合，用于 O(1) 查找 */
-  private static readonly BLOCK_TAGS = new Set([
-    'DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE', 'TD', 'TH',
-  ]);
-
-  private getTextWithLineBreaks(): string {
-    let text = '';
-    const walker = document.createTreeWalker(
-      this._container,
-      NodeFilter.SHOW_ALL,
-      null
-    );
-    const blockTags = DOMRangeAdapter.BLOCK_TAGS;
-
-    let node;
-    while ((node = walker.nextNode())) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        text += node.textContent || '';
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const element = node as Element;
-        if (element.tagName === 'BR') {
-          text += '\n';
-        } else if (blockTags.has(element.tagName)) {
-          if (
-            element.parentNode === this._container &&
-            element !== this._container.firstElementChild
-          ) {
-            text += '\n';
-          } else if (
-            element.previousElementSibling &&
-            blockTags.has(element.previousElementSibling.tagName)
-          ) {
-            text += '\n';
-          }
-        }
-      }
-    }
-    return text;
-  }
-
   // ==================== IRangeAdapter 接口实现 ====================
 
   getText(start: number, end: number): string {
@@ -370,7 +330,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const blockElements: Element[] = [];
     const allElements = this._container.querySelectorAll(BLOCK_SELECTOR);
 
-    for (const elem of Array.from(allElements)) {
+    for (const elem of allElements) {
       const pos = this.getElementPosition(elem);
       if (!pos) continue;
 
@@ -507,7 +467,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     if (mode === 'wrap') {
       /* wrap 模式：检查是否有完全包含的已有容器，整体包裹优于逐段 extract */
-      const allContainerElements = Array.from(this._container.querySelectorAll(buildContainerSelector()));
+      const allContainerElements = this._container.querySelectorAll(buildContainerSelector());
 
       const fullyContainedElements: Element[] = [];
       let coveredStart = Infinity;
@@ -626,7 +586,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
       return;
     }
 
-    const allTagElements = Array.from(this._container.querySelectorAll(selector));
+    const allTagElements = this._container.querySelectorAll(selector);
 
     for (const element of allTagElements) {
       if (!this._container.contains(element)) continue;
@@ -881,8 +841,14 @@ export class DOMRangeAdapter implements IRangeAdapter {
   normalize(start: number, end: number): void {
     const selector = buildContainerSelector();
 
+    /*
+     * 原生 normalize 递归合并所有后代中的相邻 Text 节点并移除空 Text 节点
+     * extractContents 可能在元素之间留下空文本节点，导致相邻同类标签无法合并
+     */
+    this._container.normalize();
+
     /* 单次遍历同时处理：冗余嵌套合并 + 空标签移除 */
-    const allElements = Array.from(this._container.querySelectorAll(selector));
+    const allElements = this._container.querySelectorAll(selector);
     for (const element of allElements) {
       const parent = element.parentElement;
       if (parent && isSupportedStyleElement(parent) &&
@@ -898,39 +864,6 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     /* 合并相邻的相同标签 */
     this.mergeAdjacentSameTags(start, end, selector);
-
-    /* 合并相邻的 Text 节点（消除拆分导致的碎片） */
-    this.mergeAdjacentTextNodes();
-  }
-
-  /**
-   * 合并相邻的 Text 节点
-   * 操作过程中反复拆分会导致一个容器内有多个 Text 节点
-   * 需要将相邻的 Text 节点合并为一个
-   */
-  private mergeAdjacentTextNodes(): void {
-    const merge = (parent: Node) => {
-      let i = 0;
-      while (i < parent.childNodes.length - 1) {
-        const current = parent.childNodes[i];
-        const next = parent.childNodes[i + 1];
-
-        if (current.nodeType === Node.TEXT_NODE && next.nodeType === Node.TEXT_NODE) {
-          current.textContent = (current.textContent || '') + (next.textContent || '');
-          parent.removeChild(next);
-        } else {
-          i++;
-        }
-      }
-
-      for (const child of Array.from(parent.childNodes)) {
-        if (child.nodeType === Node.ELEMENT_NODE) {
-          merge(child);
-        }
-      }
-    };
-
-    merge(this._container);
   }
 
   /**
@@ -949,6 +882,10 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
   /**
    * 合并相邻的相同标签
+   *
+   * 对于与操作范围有交集的标签，同时向前和向后合并相邻的同类型标签，
+   * 确保不会产生碎片化的 DOM 结构（如 <strong>a</strong><strong>b</strong><strong>c</strong>）
+   *
    * @param start 起始位置
    * @param end 结束位置
    */
@@ -956,26 +893,47 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const allElements = this._container.querySelectorAll(selector);
     const processedTags = new Set<Element>();
 
-    for (const element of Array.from(allElements)) {
+    for (const element of allElements) {
       if (processedTags.has(element)) continue;
 
       const pos = this.getElementPosition(element);
-      if (!pos || pos.start < start || pos.start > end) continue;
+      if (!pos) continue;
 
-      /* 只合并直接相邻的同类型标签（中间没有任何节点，包括文本节点） */
-      let candidate: Node | null = element.nextSibling;
+      /* 只处理与操作范围有交集的标签 */
+      if (pos.end <= start || pos.start >= end) continue;
+
+      let mergeTarget = element;
+
+      /* 向后合并所有相邻的同类型标签 */
+      let candidate: Node | null = mergeTarget.nextSibling;
       while (candidate) {
         if (candidate.nodeType !== Node.ELEMENT_NODE) break;
         const nextElem = candidate as Element;
-        if (!isSameContainerType(element, nextElem)) break;
+        if (!isSameContainerType(mergeTarget, nextElem)) break;
 
-        /* 直接相邻：合并内容并移除 */
         while (nextElem.firstChild) {
-          element.appendChild(nextElem.firstChild);
+          mergeTarget.appendChild(nextElem.firstChild);
         }
         processedTags.add(nextElem);
         candidate = nextElem.nextSibling;
         nextElem.remove();
+      }
+
+      /* 向前合并所有相邻的同类型标签 */
+      candidate = mergeTarget.previousSibling;
+      while (candidate) {
+        if (candidate.nodeType !== Node.ELEMENT_NODE) break;
+        const prevElem = candidate as Element;
+        if (!isSameContainerType(mergeTarget, prevElem)) break;
+
+        while (mergeTarget.firstChild) {
+          prevElem.appendChild(mergeTarget.firstChild);
+        }
+        processedTags.add(mergeTarget);
+        const emptied = mergeTarget;
+        candidate = prevElem.previousSibling;
+        mergeTarget = prevElem;
+        emptied.remove();
       }
     }
   }
@@ -992,34 +950,44 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   getDocumentLength(): number {
-    return getUnicodeStringLength(this.getTextWithLineBreaks());
+    /*
+     * 使用与 createDOMRange 一致的位置计算方式（不包含换行符），
+     * 确保 findText / setStyle / insertText 等操作的位置系统一致
+     */
+    let length = 0;
+    const walker = document.createTreeWalker(
+      this._container,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    let node;
+    while ((node = walker.nextNode())) {
+      length += getUnicodeStringLength(node.textContent || '');
+    }
+    return length;
   }
 
   findText(searchText: string): Array<{ start: number; end: number }> {
     if (!searchText) return [];
 
-    const text = this.getTextWithLineBreaks();
-    const matches: Array<{ start: number; end: number }> = [];
     const searchUnicodeLen = getUnicodeStringLength(searchText);
-    let searchIndex = 0;
-    /** 累积已扫过 UTF-16 前缀对应的 Unicode 字符数，避免重复 slice */
-    let accumulatedUnicodeLen = 0;
+    const matches: Array<{ start: number; end: number }> = [];
+    const snapshot = this.getTextNodesWithPositions(this._container);
 
-    while (searchIndex < text.length) {
-      const foundIndex = text.indexOf(searchText, searchIndex);
-      if (foundIndex === -1) break;
+    for (const { node, nodeStart } of snapshot) {
+      const text = node.textContent || '';
+      const unicodeLen = getUnicodeStringLength(text);
+      let searchIndex = 0;
 
-      /*
-       * indexOf 基于 UTF-16 code unit，需要转换为 Unicode 字符下标
-       * 用累积偏移 + 中间段差值，避免每次从头 slice
-       */
-      const middleUnicodeLen = getUnicodeStringLength(text.slice(searchIndex, foundIndex));
-      const unicodeStart = accumulatedUnicodeLen + middleUnicodeLen;
-
-      matches.push({ start: unicodeStart, end: unicodeStart + searchUnicodeLen });
-
-      accumulatedUnicodeLen = unicodeStart + searchUnicodeLen;
-      searchIndex = foundIndex + searchText.length;
+      while (searchIndex <= unicodeLen - searchUnicodeLen) {
+        const candidate = getUtf16Slice(text, searchIndex, searchIndex + searchUnicodeLen);
+        if (candidate === searchText) {
+          matches.push({ start: nodeStart + searchIndex, end: nodeStart + searchIndex + searchUnicodeLen });
+          searchIndex += searchUnicodeLen;
+        } else {
+          searchIndex++;
+        }
+      }
     }
 
     return matches;
@@ -1028,7 +996,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
   hasStyle(start: number, end: number, tagName: string): boolean {
     const allElements = this._container.querySelectorAll(tagName);
 
-    for (const element of Array.from(allElements)) {
+    for (const element of allElements) {
       const pos = this.getElementPosition(element);
       if (pos && pos.start < end && pos.end > start) {
         return true;
@@ -1039,7 +1007,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   removeElementsBySelector(selector: string, keepChildren: boolean): void {
-    const elements = Array.from(this._container.querySelectorAll(selector));
+    const elements = this._container.querySelectorAll(selector);
 
     for (const element of elements) {
       if (keepChildren) {
@@ -1057,7 +1025,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     /* keepChildren 时子节点被提升，可能产生相邻 Text 碎片；直接移除不会 */
     if (keepChildren) {
-      this.mergeAdjacentTextNodes();
+      this._container.normalize();
     }
   }
 
@@ -1096,6 +1064,6 @@ export class DOMRangeAdapter implements IRangeAdapter {
       target.remove();
     }
 
-    this.mergeAdjacentTextNodes();
+    this._container.normalize();
   }
 }

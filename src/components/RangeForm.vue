@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { ref, watchEffect } from 'vue';
   import BaseInput from './BaseInput.vue';
   import BaseButton from './BaseButton.vue';
 
@@ -51,13 +51,10 @@
     { value: 'highlight', label: '高亮', icon: 'H', tag: 'mark' }
   ] as const;
 
-  /** 监听props变化更新表单数据 */
-  watch(() => props.start, (newStart) => {
-    formData.value.start = newStart;
-  });
-
-  watch(() => props.end, (newEnd) => {
-    formData.value.end = newEnd;
+  /** 监听 props 变化同步到表单数据 */
+  watchEffect(() => {
+    formData.value.start = props.start;
+    formData.value.end = props.end;
   });
 
   /** 验证表单数据 */

@@ -1,33 +1,25 @@
 <script setup lang="ts">
-  import { ref, watch, onMounted, computed, nextTick, useTemplateRef } from 'vue';
+  import { ref, watch, onMounted, computed } from 'vue';
   import { useStorage, useDebounceFn, useIntervalFn } from '@vueuse/core';
   import EditorCore from './components/EditorCore.vue';
   import diff from 'fast-diff';
   import Prism from 'prismjs';
   import 'prismjs/themes/prism-tomorrow.css';
   import 'prismjs/components/prism-markup';
-  import * as jsBeautify from 'js-beautify';
+  import { html as formatHTML } from 'js-beautify';
 
   /** EditorCore 组件引用 */
   const editorRef = ref<InstanceType<typeof EditorCore> | null>(null);
 
-  /** HTML 代码展示区域的 ref */
-  const htmlCodeContainer = useTemplateRef<HTMLElement>('htmlCodeContainer');
-
   /** 编辑器内容 - 使用 localStorage 持久化 */
-  const editorContent = useStorage<string>('range-warp-editor-content', '', localStorage, {
-    serializer: {
-      read: (v: any) => v,
-      write: (v: any) => v,
-    },
-  });
+  const editorContent = useStorage<string>('range-warp-editor-content', '', localStorage);
 
   /** 格式化后的 HTML（使用 js-beautify） */
   const formattedHTML = computed(() => {
     if (!editorContent.value) return '';
 
     try {
-      return jsBeautify.html(editorContent.value, {
+      return formatHTML(editorContent.value, {
         indent_size: 2,
         wrap_line_length: 0,
         // 将默认的 inline 标签设为空数组，这样所有标签都会换行和缩进
@@ -44,26 +36,11 @@
     }
   });
 
-  /** 监听 HTML 变化，手动更新 DOM 并应用 Prism 高亮 */
-  watch(formattedHTML, (newHTML) => {
-    nextTick(() => {
-      if (htmlCodeContainer.value) {
-        // 清空现有内容
-        const preElement = htmlCodeContainer.value;
-        preElement.innerHTML = '';
-
-        // 创建 code 元素
-        const codeElement = document.createElement('code');
-        codeElement.className = 'language-html text-xs block p-3';
-        codeElement.textContent = newHTML || '(空内容)';
-
-        preElement.appendChild(codeElement);
-
-        // 应用 Prism 语法高亮（会保留换行和缩进）
-        Prism.highlightElement(codeElement);
-      }
-    });
-  }, { immediate: true });
+  /** 高亮后的 HTML（使用 Prism 语法高亮） */
+  const highlightedHTML = computed(() => {
+    if (!formattedHTML.value) return '<span class="text-gray-500">(空内容)</span>';
+    return Prism.highlight(formattedHTML.value, Prism.languages.markup, 'markup');
+  });
 
   /** 保存状态：'idle' | 'saving' | 'saved' */
   const saveStatus = ref<'idle' | 'saving' | 'saved'>('idle');
@@ -72,9 +49,8 @@
   const saveCountdown = ref(0);
 
   /** 节流保存函数（500ms） */
-  const debouncedSave = useDebounceFn((html: string) => {
+  const debouncedSave = useDebounceFn(() => {
     saveStatus.value = 'saving';
-    editorContent.value = html;
 
     setTimeout(() => {
       saveStatus.value = 'saved';
@@ -106,9 +82,8 @@
   });
 
   /** 触发保存 */
-  const triggerSave = (html?: string) => {
-    const content = html || editorRef.value?.getHTML() || '';
-    debouncedSave(content);
+  const triggerSave = () => {
+    debouncedSave();
     saveCountdown.value = 500;
   };
 
@@ -117,6 +92,9 @@
 
   /** 当前选中的文本范围 - 使用编辑器内部的持久化选区 */
   const selectedRange = computed(() => editorRef.value?.currentSelection || { start: 0, end: 0, text: '' });
+
+  /** 编辑器实例（便捷访问） */
+  const editor = computed(() => editorRef.value?.editor);
 
   /** 书签列表 */
   const bookmarks = ref<Array<{ id: string; name: string; createTime: number }>>([]);
@@ -135,8 +113,8 @@
 
   /** 刷新书签列表 */
   const refreshBookmarks = () => {
-    if (!editorRef.value?.editor) return;
-    const bookmarkList = editorRef.value.editor.getAllBookmarks();
+    if (!editor.value) return;
+    const bookmarkList = editor.value.getAllBookmarks();
     bookmarks.value = bookmarkList.map((bm) => ({
       id: bm.metadata.id,
       name: bm.metadata.name,
@@ -146,8 +124,8 @@
 
   /** 刷新修订列表 */
   const refreshRevisions = () => {
-    if (!editorRef.value?.editor) return;
-    const revisionList = editorRef.value.editor.getAllRevisions();
+    if (!editor.value) return;
+    const revisionList = editor.value.getAllRevisions();
     revisions.value = revisionList.map((rev) => ({
       id: rev.metadata.id,
       type: rev.metadata.type,
@@ -159,11 +137,11 @@
 
   /** 创建书签 */
   function createBookmark() {
-    if (!editorRef.value?.editor || selectedRange.value.start === selectedRange.value.end) return;
+    if (!editor.value || selectedRange.value.start === selectedRange.value.end) return;
 
     const { start, end } = selectedRange.value;
 
-    editorRef.value.editor.createBookmark({
+    editor.value.createBookmark({
       name: `书签 ${bookmarks.value.length + 1}`,
       start,
       end,
@@ -174,26 +152,26 @@
 
   /** 跳转到书签 */
   function gotoBookmark(id: string) {
-    if (!editorRef.value?.editor) return;
-    editorRef.value.editor.gotoBookmark(id);
+    if (!editor.value) return;
+    editor.value.gotoBookmark(id);
   }
 
   /** 删除书签 */
   function deleteBookmark(id: string) {
-    if (!editorRef.value?.editor) return;
-    editorRef.value.editor.deleteBookmark(id);
+    if (!editor.value) return;
+    editor.value.deleteBookmark(id);
     refreshBookmarks();
   }
 
   /** 创建插入修订 */
   function createInsertRevision() {
-    if (!editorRef.value?.editor || selectedRange.value.start === selectedRange.value.end) return;
+    if (!editor.value || selectedRange.value.start === selectedRange.value.end) return;
 
     const { start, end } = selectedRange.value;
 
     // 创建插入修订，将选中文本标记为插入内容
-    const range = editorRef.value.editor.createRange(start, end);
-    editorRef.value.editor.revisions.createInsert({
+    const range = editor.value.createRange(start, end);
+    editor.value.revisions.createInsert({
       range,
       author: 'current-user',
       comment: '手动标记的插入修订',
@@ -204,13 +182,13 @@
 
   /** 创建删除修订 */
   function createDeleteRevision() {
-    if (!editorRef.value?.editor || selectedRange.value.start === selectedRange.value.end) return;
+    if (!editor.value || selectedRange.value.start === selectedRange.value.end) return;
 
     const { start, end } = selectedRange.value;
 
     // 创建删除修订，将选中文本标记为待删除内容
-    const range = editorRef.value.editor.createRange(start, end);
-    editorRef.value.editor.revisions.createDelete({
+    const range = editor.value.createRange(start, end);
+    editor.value.revisions.createDelete({
       range,
       author: 'current-user',
       comment: '手动标记的删除修订',
@@ -229,7 +207,7 @@
 
   /** 比较并创建修订 */
   function compareAndCreateRevisions() {
-    if (!editorRef.value?.editor || selectedRange.value.start === selectedRange.value.end) return;
+    if (!editor.value || selectedRange.value.start === selectedRange.value.end) return;
     if (!comparisonText.value.trim()) return;
 
     const originalText = selectedOriginalText.value;
@@ -241,6 +219,9 @@
     const { start } = selectedRange.value;
     let currentPosition = start;
 
+    /** Unicode 字符长度 */
+    const strLen = (s: string) => { let n = 0; for (const _ of s) n++; return n; };
+
     // 构建操作列表并计算位置
     const operations: Array<{ type: number; text: string; position: number }> = [];
     for (const [type, text] of diffResult) {
@@ -250,7 +231,7 @@
         position: currentPosition,
       });
       if (type === diff.EQUAL || type === diff.DELETE) {
-        currentPosition += Array.from(text).length;
+        currentPosition += strLen(text);
       }
     }
 
@@ -264,23 +245,23 @@
         continue;
       }
 
-      const endPos = position + Array.from(text).length;
+      const endPos = position + strLen(text);
 
       if (type === diff.INSERT) {
         // 插入操作：使用 Range 的 insertText
-        const range = editorRef.value.editor.createRange(position, position);
+        const range = editor.value!.createRange(position, position);
         range.insertText(text);
         // 创建插入修订
-        const newRange = editorRef.value.editor.createRange(position, position + Array.from(text).length);
-        editorRef.value.editor.revisions.createInsert({
+        const newRange = editor.value!.createRange(position, position + strLen(text));
+        editor.value!.revisions.createInsert({
           range: newRange,
           author: 'current-user',
           comment: '通过对比生成的插入修订',
         });
       } else if (type === diff.DELETE) {
         // 删除操作：创建删除修订
-        const range = editorRef.value.editor.createRange(position, endPos);
-        editorRef.value.editor.revisions.createDelete({
+        const range = editor.value!.createRange(position, endPos);
+        editor.value!.revisions.createDelete({
           range,
           author: 'current-user',
           comment: '通过对比生成的删除修订',
@@ -298,29 +279,29 @@
 
   /** 接受所有修订 */
   function acceptAllRevisions() {
-    if (!editorRef.value?.editor) return;
-    editorRef.value.editor.revisions.acceptAll();
+    if (!editor.value) return;
+    editor.value.revisions.acceptAll();
     refreshRevisions();
   }
 
   /** 拒绝所有修订 */
   function rejectAllRevisions() {
-    if (!editorRef.value?.editor) return;
-    editorRef.value.editor.revisions.rejectAll();
+    if (!editor.value) return;
+    editor.value.revisions.rejectAll();
     refreshRevisions();
   }
 
   /** 接受修订 */
   function acceptRevision(id: string) {
-    if (!editorRef.value?.editor) return;
-    editorRef.value.editor.revisions.acceptById(id);
+    if (!editor.value) return;
+    editor.value.revisions.acceptById(id);
     refreshRevisions();
   }
 
   /** 拒绝修订 */
   function rejectRevision(id: string) {
-    if (!editorRef.value?.editor) return;
-    editorRef.value.editor.revisions.rejectById(id);
+    if (!editor.value) return;
+    editor.value.revisions.rejectById(id);
     refreshRevisions();
   }
 
@@ -328,9 +309,9 @@
   onMounted(() => {
     // 等待编辑器初始化完成后刷新数据
     watch(
-      () => editorRef.value?.editor,
-      (editor) => {
-        if (editor) {
+      () => editor.value,
+      (ed) => {
+        if (ed) {
           refreshBookmarks();
           refreshRevisions();
         }
@@ -341,7 +322,7 @@
 
   /** 监听标签切换，刷新对应数据 */
   watch(activeTab, (newTab) => {
-    if (!editorRef.value?.editor) return;
+    if (!editor.value) return;
 
     if (newTab === 'bookmarks') {
       refreshBookmarks();
@@ -363,7 +344,7 @@
               <h2 class="text-sm font-semibold text-gray-800">HTML 源码</h2>
             </div>
             <div class="flex-1 overflow-auto">
-              <pre ref="htmlCodeContainer" class="language-html h-full m-0! text-sm!"></pre>
+              <pre class="language-html h-full m-0! text-sm!"><code class="text-xs block p-3" v-html="highlightedHTML"></code></pre>
             </div>
             <!-- 保存状态 -->
             <div class="px-4 py-2 border-t border-gray-200 text-xs flex items-center justify-between">
@@ -384,7 +365,7 @@
 
           <!-- 中间：富文本编辑器 -->
           <EditorCore ref="editorRef" :model-value="editorContent"
-            @update:model-value="(html) => { editorContent = html; triggerSave(html); }" />
+            @update:model-value="(html) => { editorContent = html; triggerSave(); }" />
 
           <!-- 右侧：信息面板 -->
           <div class="w-80 bg-white rounded-lg border border-gray-300 shadow-sm flex flex-col">

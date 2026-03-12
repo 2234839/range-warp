@@ -12,6 +12,7 @@ import type { IRangeAdapter } from './adapters/IRangeAdapter';
 import { Range } from './models/Range';
 import { BookmarkService, type CreateBookmarkOptions } from './services/BookmarkService';
 import { RevisionService } from './services/RevisionService';
+import { getUnicodeStringLength } from './utils';
 
 export interface EditorOptions {
   /** 适配器实例 */
@@ -99,7 +100,7 @@ export class Editor {
         });
 
         /* 插入新文本并包裹为插入修订 */
-        const newLength = [...replaceText].length;
+        const newLength = getUnicodeStringLength(replaceText);
         if (newLength > 0) {
           const insertAt = this.createRange(end, end);
           insertAt.insertText(replaceText);

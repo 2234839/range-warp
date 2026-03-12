@@ -854,6 +854,156 @@ test('11.6 acceptById / rejectById', () => {
   );
 });
 
+/* ==================== 12. 同类型修订不产生自身嵌套 ==================== */
+
+console.log('\n=== 12. 同类型修订不产生自身嵌套 ===');
+
+test('12.1 同区域新增后新增 - 新修订覆盖旧修订', () => {
+  const { container, service, createRange } = createEnv('Hello');
+
+  service.createInsert({ range: createRange(0, 5), author: 'Alice' });
+  service.createInsert({ range: createRange(0, 5), author: 'Bob' });
+
+  const revisions = service.getAll();
+  /* 旧修订被完全覆盖，只剩新修订 */
+  return (
+    assert(revisions.length === 1, `修订数量错误: ${revisions.length}`) &&
+    assert(revisions[0].metadata.author === 'Bob', `应为 Bob 的修订`) &&
+    assert(!container.querySelector('.revision-insert .revision-insert'), '产生了嵌套')
+  );
+});
+
+test('12.2 同区域删除后删除 - 新修订覆盖旧修订', () => {
+  const { container, service, createRange } = createEnv('Hello');
+
+  service.createDelete({ range: createRange(0, 5), author: 'Alice' });
+  service.createDelete({ range: createRange(0, 5), author: 'Bob' });
+
+  const revisions = service.getAll();
+  return (
+    assert(revisions.length === 1, `修订数量错误: ${revisions.length}`) &&
+    assert(revisions[0].metadata.author === 'Bob', `应为 Bob 的修订`) &&
+    assert(!container.querySelector('.revision-delete .revision-delete'), '产生了嵌套')
+  );
+});
+
+test('12.3 新增后部分新增 - 保留非重叠部分', () => {
+  /* insert(A) [0,4]=abcd, insert(B) [1,3]=bc → "a" 保持 A, "bc" 交给 B, "d" 保持 A */
+  const { container, service, createRange } = createEnv('abcd');
+
+  service.createInsert({ range: createRange(0, 4), author: 'Alice' });
+  service.createInsert({ range: createRange(1, 3), author: 'Bob' });
+
+  const revisions = service.getAll();
+  const bobs = revisions.filter(r => r.metadata.author === 'Bob');
+  const alices = revisions.filter(r => r.metadata.author === 'Alice');
+
+  return (
+    assert(!container.querySelector('.revision-insert .revision-insert'), '产生了嵌套') &&
+    assert(bobs.length === 1 && bobs[0].getText() === 'bc', `Bob 修订内容错误: "${bobs[0]?.getText()}"`) &&
+    assert(alices.length === 2, `Alice 修订数量错误: ${alices.length}`)
+  );
+});
+
+test('12.4 删除后部分删除 - 保留非重叠部分', () => {
+  /* delete(A) [0,4]=abcd, delete(B) [1,3]=bc → "a" 保持 A, "bc" 交给 B, "d" 保持 A */
+  const { container, service, createRange } = createEnv('abcd');
+
+  service.createDelete({ range: createRange(0, 4), author: 'Alice' });
+  service.createDelete({ range: createRange(1, 3), author: 'Bob' });
+
+  const revisions = service.getAll();
+  const bobs = revisions.filter(r => r.metadata.author === 'Bob');
+  const alices = revisions.filter(r => r.metadata.author === 'Alice');
+
+  return (
+    assert(!container.querySelector('.revision-delete .revision-delete'), '产生了嵌套') &&
+    assert(bobs.length === 1 && bobs[0].getText() === 'bc', `Bob 修订内容错误: "${bobs[0]?.getText()}"`) &&
+    assert(alices.length === 2, `Alice 修订数量错误: ${alices.length}`)
+  );
+});
+
+test('12.5 新增后中间新增 - 保留前后部分', () => {
+  /* insert(A) [0,4]=abcd, insert(B) [1,3]=bc → "a"+"d" 保持 A, "bc" 交给 B */
+  const { container, service, createRange } = createEnv('abcd');
+
+  service.createInsert({ range: createRange(0, 4), author: 'Alice' });
+  service.createInsert({ range: createRange(1, 3), author: 'Bob' });
+
+  const revisions = service.getAll();
+  const bobs = revisions.filter(r => r.metadata.author === 'Bob');
+
+  return (
+    assert(!container.querySelector('.revision-insert .revision-insert'), '产生了嵌套') &&
+    assert(bobs.length === 1 && bobs[0].getText() === 'bc', `Bob 修订内容错误: "${bobs[0]?.getText()}"`)
+  );
+});
+
+/* ==================== 13. 跨段落修订 ==================== */
+
+console.log('\n=== 13. 跨段落修订 ===');
+
+test('13.1 跨段落新增修订 - 正确拆分', () => {
+  const { container, service, createRange } = createEnv('<p>Hello</p><p>World</p>');
+
+  service.createInsert({ range: createRange(2, 8), author: 'test' });
+
+  const insertSpans = container.querySelectorAll('.revision-insert');
+  const allIds = new Set<string>();
+  for (const span of Array.from(insertSpans)) {
+    allIds.add(span.getAttribute('data-revision-id')!);
+  }
+
+  /* 应该有两个修订元素（每段一个），共享同一个 revision ID */
+  return (
+    assert(insertSpans.length === 2, `修订元素数量错误: ${insertSpans.length}`) &&
+    assert(allIds.size === 1, `修订 ID 不统一`) &&
+    assert(container.textContent === 'HelloWorld', `文本内容错误: "${container.textContent}"`)
+  );
+});
+
+test('13.2 跨段落删除修订 - 正确拆分', () => {
+  const { container, service, createRange } = createEnv('<p>Hello</p><p>World</p>');
+
+  service.createDelete({ range: createRange(2, 8), author: 'test' });
+
+  const deleteSpans = container.querySelectorAll('.revision-delete');
+  const allIds = new Set<string>();
+  for (const span of Array.from(deleteSpans)) {
+    allIds.add(span.getAttribute('data-revision-id')!);
+  }
+
+  return (
+    assert(deleteSpans.length === 2, `修订元素数量错误: ${deleteSpans.length}`) &&
+    assert(allIds.size === 1, `修订 ID 不统一`) &&
+    assert(container.textContent === 'HelloWorld', `文本内容错误: "${container.textContent}"`)
+  );
+});
+
+test('13.3 跨段落修订的接受 - 全部移除', () => {
+  const { container, service, createRange } = createEnv('<p>Hello</p><p>World</p>');
+
+  const revision = service.createInsert({ range: createRange(2, 8), author: 'test' });
+  service.accept(revision);
+
+  return (
+    assert(!container.querySelector('.revision-insert'), '修订标记未移除') &&
+    assert(container.textContent === 'HelloWorld', `文本内容错误: "${container.textContent}"`)
+  );
+});
+
+test('13.4 跨段落修订的拒绝 - 内容删除', () => {
+  const { container, service, createRange } = createEnv('<p>Hello</p><p>World</p>');
+
+  const revision = service.createInsert({ range: createRange(2, 8), author: 'test' });
+  service.reject(revision);
+
+  return (
+    assert(!container.querySelector('.revision-insert'), '修订标记未移除') &&
+    assert(container.textContent === 'Held', `文本内容错误: "${container.textContent}"`)
+  );
+});
+
 /* ==================== 结果汇总 ==================== */
 
 console.log(`\n${'='.repeat(50)}`);

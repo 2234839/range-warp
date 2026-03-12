@@ -163,7 +163,7 @@ export class Bookmark {
     const elements = container.querySelectorAll(`.${BOOKMARK_CLASS}`);
     const bookmarks: Bookmark[] = [];
 
-    for (const element of Array.from(elements)) {
+    for (const element of elements) {
       const bookmark = Bookmark.fromElement(element, adapter);
       if (bookmark) {
         bookmarks.push(bookmark);
@@ -200,7 +200,7 @@ export class Bookmark {
     const elements = container.querySelectorAll(`[data-bookmark-name="${escapedName}"]`);
     const bookmarks: Bookmark[] = [];
 
-    for (const element of Array.from(elements)) {
+    for (const element of elements) {
       const bookmark = Bookmark.fromElement(element, adapter);
       if (bookmark) {
         bookmarks.push(bookmark);

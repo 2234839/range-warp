@@ -91,7 +91,7 @@ export class Revision {
     let minStart = Infinity;
     let maxEnd = 0;
 
-    for (const element of Array.from(elements)) {
+    for (const element of elements) {
       const pos = getElementPosition(element, container);
       if (pos) {
         minStart = Math.min(minStart, pos.start);
@@ -171,7 +171,7 @@ export class Revision {
     const elements = container.querySelectorAll(selector);
     const blockSet = new Set<Element>();
 
-    for (const el of Array.from(elements)) {
+    for (const el of elements) {
       let parent: Element | null = el.parentElement;
       while (parent && parent !== container) {
         if (parent.parentElement === container) {
@@ -262,7 +262,7 @@ export class Revision {
     const seenIds = new Set<string>();
     const revisions: Revision[] = [];
 
-    for (const element of Array.from(elements)) {
+    for (const element of elements) {
       const id = element.getAttribute('data-revision-id');
       if (!id || seenIds.has(id)) continue;
       const revision = Revision.fromElement(element, adapter);
@@ -306,7 +306,7 @@ export class Revision {
     /* 单次遍历：按 ID 分组并计算范围边界，避免 N+1 查询 */
     const idRanges = new Map<string, { minStart: number; maxEnd: number; sampleElement: Element }>();
 
-    for (const element of Array.from(elements)) {
+    for (const element of elements) {
       const id = element.getAttribute('data-revision-id');
       if (!id) continue;
 

@@ -1,22 +1,16 @@
 <script setup lang="ts">
-  import { ref, useTemplateRef, readonly } from 'vue';
-  import {
-    formatTextRange,
-    unwrapElementsByTag,
-    checkSelectionHasFormat,
-    getTextContentWithLineBreaks,
-  } from '../utils/richTextEditor';
+  import { ref, onMounted, useTemplateRef, readonly } from 'vue';
+  import { Editor, DOMRangeAdapter } from '../core/index';
+  import type { Editor as EditorType } from '../core/index';
+  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition } from './editor-utils';
 
   const editDiv = useTemplateRef('editDiv');
 
+  /** Editor 实例 */
+  const editor = ref<EditorType | null>(null);
+
   /** 当前选中的文本格式状态 */
-  const formatState = ref({
-    bold: false,
-    italic: false,
-    underline: false,
-    strikethrough: false,
-    highlight: false,
-  });
+  const formatState = ref({ ...EMPTY_FORMAT_STATE });
 
   /** 当前选中的文本范围 */
   const selectedRange = ref({
@@ -38,103 +32,57 @@
   /** 防止递归触发 */
   const isProcessing = ref(false);
 
-  /** 应用文本格式 - 支持切换状态 - 基于文本位置 */
-  function applyFormat(format: string) {
+  onMounted(() => {
     if (!editDiv.value) return;
 
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
+    const adapter = new DOMRangeAdapter({
+      container: editDiv.value,
+    });
 
-    const range = selection.getRangeAt(0);
-    if (range.collapsed) return;
+    editor.value = new Editor({
+      adapter,
+    });
+  });
 
-    let tagName = '';
-    switch (format) {
-      case 'bold':
-        tagName = 'strong';
-        break;
-      case 'italic':
-        tagName = 'em';
-        break;
-      case 'underline':
-        tagName = 'u';
-        break;
-      case 'strikethrough':
-        tagName = 's';
-        break;
-      case 'highlight':
-        tagName = 'mark';
-        break;
-      default:
-        return;
+  /** 应用文本格式 - 支持切换状态 */
+  function applyFormat(format: string, start?: number, end?: number) {
+    if (!editor.value) return;
+
+    const styleKey = STYLE_KEYS[format];
+    if (!styleKey) return;
+
+    /** 若未传入位置，从当前选区获取 */
+    let rangeStart = start;
+    let rangeEnd = end;
+    if (rangeStart === undefined || rangeEnd === undefined) {
+      if (!editDiv.value) return;
+      const pos = getSelectionPosition(editDiv.value);
+      if (!pos) return;
+      rangeStart = pos.start;
+      rangeEnd = pos.end;
     }
 
-    // 计算选区的文本位置 - 使用 Unicode 字符计算
-    const preSelectionRange = range.cloneRange();
-    preSelectionRange.selectNodeContents(editDiv.value);
-    preSelectionRange.setEnd(range.startContainer, range.startOffset);
-    const start = Array.from(preSelectionRange.toString()).length;
-
-    const end = start + Array.from(range.toString()).length;
-
-    // 检查选区内是否已存在对应的格式
-    const isFormatted = checkSelectionHasFormat(editDiv.value, start, end, tagName);
-
-    if (isFormatted) {
-      // 如果已有格式，则取消格式 - 基于文本位置
-      unwrapElementsByTag(editDiv.value, start, end, tagName);
+    if (formatState.value[styleKey]) {
+      editor.value.removeStyle(rangeStart, rangeEnd, format);
     } else {
-      // 如果没有格式，则添加格式 - 基于文本位置
-      formatTextRange(editDiv.value, start, end, tagName);
+      editor.value.applyStyle(rangeStart, rangeEnd, format);
     }
 
-    // 触发格式应用事件
-    emit('formatApply', start, end, format);
-
-    // 使用 setTimeout 异步更新格式状态，避免循环调用
-    setTimeout(() => {
-      updateFormatState();
-    }, 0);
+    emit('formatApply', rangeStart, rangeEnd, format);
+    setTimeout(updateFormatState, 0);
   }
 
   /** 更新格式状态 */
   function updateFormatState() {
-    if (!editDiv.value) return;
+    if (!editor.value || !editDiv.value) return;
 
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      // 重置所有状态
-      formatState.value = {
-        bold: false,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        highlight: false,
-      };
+    const pos = getSelectionPosition(editDiv.value);
+    if (!pos || pos.start === pos.end) {
+      formatState.value = { ...EMPTY_FORMAT_STATE };
       return;
     }
 
-    const range = selection.getRangeAt(0);
-    const parentElement =
-      range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
-        ? (range.commonAncestorContainer as Element)
-        : range.commonAncestorContainer.parentElement;
-
-    if (parentElement) {
-      formatState.value = {
-        bold: isNodeFormatted(parentElement, 'strong') || isNodeFormatted(parentElement, 'b'),
-        italic: isNodeFormatted(parentElement, 'em') || isNodeFormatted(parentElement, 'i'),
-        underline: isNodeFormatted(parentElement, 'u'),
-        strikethrough:
-          isNodeFormatted(parentElement, 's') || isNodeFormatted(parentElement, 'strike'),
-        highlight: isNodeFormatted(parentElement, 'mark'),
-      };
-    }
-  }
-
-  /** 检查节点是否包含指定格式 */
-  function isNodeFormatted(element: Element, tagName: string): boolean {
-    return element.closest(tagName) !== null;
+    formatState.value = editor.value.getFormatState(pos.start, pos.end);
   }
 
   /** 复制HTML内容 */
@@ -159,96 +107,24 @@
     if (!editDiv.value) return;
 
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
+    if (!selection || selection.rangeCount === 0 || selection.getRangeAt(0).collapsed) {
       selectedRange.value = { start: 0, end: 0 };
       selectedText.value = '';
       emit('selectionChange', 0, 0);
       return;
     }
 
-    const range = selection.getRangeAt(0);
-    if (range.collapsed) {
-      selectedRange.value = { start: 0, end: 0 };
-      selectedText.value = '';
-      emit('selectionChange', 0, 0);
-      return;
-    }
+    const pos = getSelectionPosition(editDiv.value);
+    if (!pos) return;
 
-    // 计算选区的文本位置 - 使用包含换行符的方法
-    const preSelectionRange = range.cloneRange();
-    preSelectionRange.selectNodeContents(editDiv.value);
-    preSelectionRange.setEnd(range.startContainer, range.startOffset);
-
-    // 创建临时div来计算准确的文本位置
-    const tempDiv = document.createElement('div');
-    tempDiv.appendChild(preSelectionRange.cloneContents());
-    const startText = getTextContentWithLineBreaks(tempDiv);
-    const start = Array.from(startText).length;
-
-    // 计算选中内容的长度
-    const selectedDiv = document.createElement('div');
-    selectedDiv.appendChild(range.cloneContents());
-    const selectedTextContent = getTextContentWithLineBreaks(selectedDiv);
-    const selectedLength = Array.from(selectedTextContent).length;
-    const end = start + selectedLength;
-
-    selectedRange.value = { start, end };
-    selectedText.value = selectedTextContent;
-    emit('selectionChange', start, end);
-  }
-
-  /** 应用文本格式 */
-  function applyTextFormat(start: number, end: number, format: string) {
-    if (!editDiv.value) return;
-
-    try {
-      let tagName = '';
-      switch (format) {
-        case 'bold':
-          tagName = 'strong';
-          break;
-        case 'italic':
-          tagName = 'em';
-          break;
-        case 'underline':
-          tagName = 'u';
-          break;
-        case 'strikethrough':
-          tagName = 's';
-          break;
-        case 'highlight':
-          tagName = 'mark';
-          break;
-        default:
-          return;
-      }
-
-      // 检查范围内是否已存在对应的格式
-      const isFormatted = checkSelectionHasFormat(editDiv.value, start, end, tagName);
-
-      if (isFormatted) {
-        // 如果已有格式，则取消格式
-        unwrapElementsByTag(editDiv.value, start, end, tagName);
-      } else {
-        // 如果没有格式，则添加格式
-        formatTextRange(editDiv.value, start, end, tagName);
-      }
-
-      // 触发格式应用事件
-      emit('formatApply', start, end, format);
-
-      // 异步更新格式状态
-      setTimeout(() => {
-        updateFormatState();
-      }, 0);
-    } catch (error) {
-      console.error('应用格式失败:', error);
-    }
+    selectedRange.value = { start: pos.start, end: pos.end };
+    selectedText.value = selection.getRangeAt(0).toString();
+    emit('selectionChange', pos.start, pos.end);
   }
 
   /** 暴露给父组件调用的方法 */
   defineExpose({
-    applyTextFormat,
+    applyFormat,
     selectedRange: readonly(selectedRange),
   });
 </script>

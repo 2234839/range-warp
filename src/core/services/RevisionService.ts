@@ -12,6 +12,7 @@ import type { IRangeAdapter } from '../adapters/IRangeAdapter';
 import { registerContainerConfig } from '../adapters/DOMRangeAdapter.js';
 import { Range } from '../models/Range';
 import { Revision, RevisionType, type RevisionMetadata } from '../models/Revision';
+import { generateId } from '../utils';
 
 /** 注册修订容器配置（使适配器能识别修订元素） */
 registerContainerConfig('revision-insert', {
@@ -89,7 +90,7 @@ export class RevisionService {
   create(options: CreateRevisionOptions): Revision {
     const { type, range, author, comment, customData } = options;
     const metadata: RevisionMetadata = {
-      id: this.generateId(),
+      id: generateId('rev'),
       type,
       author,
       createTime: Date.now(),
@@ -106,7 +107,7 @@ export class RevisionService {
      * 参考 ProseMirror addMark: 添加新 mark 前先移除冲突的 mark
      * 新增/删除修订互斥：创建新修订前解包已有冲突修订，保留文本内容
      */
-    this.removeConflictingRevisions(range.start, range.end, type);
+    this.removeConflictingRevisions(range.start, range.end);
 
     const revision = this._wrapRevision(range, metadata);
     this.refresh();
@@ -133,24 +134,24 @@ export class RevisionService {
   private _createAndWrapRevision(start: number, end: number, type: RevisionType, author: string): void {
     this._wrapRevision(
       new Range({ start, end, adapter: this._adapter }),
-      { id: this.generateId(), type, author, createTime: Date.now() },
+      { id: generateId('rev'), type, author, createTime: Date.now() },
     );
   }
 
   /**
-   * 移除范围内与新修订类型冲突的已有修订
+   * 移除范围内与已有修订冲突的部分
    *
+   * 参考 ProseMirror addMark: 添加新 mark 前先移除所有冲突的 mark（包括同类型）
    * 策略：完全移除冲突修订（保留文本），然后对非重叠部分重建同类型修订
    *
    * 例：insert 在 [0,3] 然后 delete 在 [1,3]
    *   → 完全移除 insert 修订，"a" 重建 insert，"bc" 交给新 delete
    *
-   * 例：delete 在 [0,3] 然后 insert 在 [1,3]
-   *   → 完全移除 delete 修订，"a" 重建 delete，"bc" 交给新 insert
+   * 例：insert 在 [0,3] 然后 insert 在 [1,3]（同类型重叠）
+   *   → 完全移除旧 insert 修订，"a" 重建旧 insert，"bc" 交给新 insert
    */
-  private removeConflictingRevisions(start: number, end: number, type: RevisionType): void {
-    const conflicting = this.queryInRange(start, end)
-      .filter(r => r.metadata.type !== type);
+  private removeConflictingRevisions(start: number, end: number): void {
+    const conflicting = this.queryInRange(start, end);
 
     for (const revision of conflicting) {
       const revRange = revision.getRange();
@@ -425,13 +426,6 @@ export class RevisionService {
     return [...this._revisions];
   }
 
-  /**
-   * 生成唯一ID
-   * @returns ID 字符串
-   */
-  private generateId(): string {
-    return `rev-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  }
 }
 
 export default RevisionService;

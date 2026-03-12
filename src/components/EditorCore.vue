@@ -3,6 +3,7 @@
   import { useEventListener } from '@vueuse/core';
   import { Editor, DOMRangeAdapter } from '../core/index';
   import type { Editor as EditorType } from '../core/index';
+  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition } from './editor-utils';
 
   /** 组件属性 */
   interface Props {
@@ -48,13 +49,7 @@
   } | null>(null);
 
   /** 格式状态 */
-  const formatState = ref({
-    bold: false,
-    italic: false,
-    underline: false,
-    strikethrough: false,
-    highlight: false,
-  });
+  const formatState = ref({ ...EMPTY_FORMAT_STATE });
 
   /**
    * 初始化编辑器
@@ -87,47 +82,25 @@
     if (!editorContainer.value) return;
 
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      return;
-    }
+    if (!selection || selection.rangeCount === 0 || selection.getRangeAt(0).collapsed) return;
 
     const range = selection.getRangeAt(0);
+    if (!editorContainer.value.contains(range.commonAncestorContainer)) return;
 
-    // 检查选区是否在编辑器内
-    if (!editorContainer.value.contains(range.commonAncestorContainer)) {
-      return;
-    }
+    const pos = getSelectionPosition(editorContainer.value);
+    if (!pos) return;
 
-    if (range.collapsed) {
-      return;
-    }
-
-    // 计算选区位置
-    const container = editorContainer.value;
-    const preRange = range.cloneRange();
-    preRange.selectNodeContents(container);
-    preRange.setEnd(range.startContainer, range.startOffset);
-
-    const start = Array.from(preRange.toString()).length;
     const text = range.toString();
-    const end = start + Array.from(text).length;
+    persistentSelection.value = { start: pos.start, end: pos.end, text };
+    currentSelection.value = { start: pos.start, end: pos.end, text };
 
-    // 更新持久化选区
-    persistentSelection.value = { start, end, text };
-    currentSelection.value = { start, end, text };
-
-    // 使用 CSS Custom Highlight API 高亮选区
+    /* 使用 CSS Custom Highlight API 高亮选区 */
     if (CSS.highlights) {
-      const highlightRange = range.cloneRange();
-      const highlight = new Highlight(highlightRange);
-      CSS.highlights.set('editor-selection', highlight);
+      CSS.highlights.set('editor-selection', new Highlight(range.cloneRange()));
     }
 
-    // 更新格式状态
     updateFormatState();
-
-    // 触发事件
-    emit('selectionChange', start, end, text);
+    emit('selectionChange', pos.start, pos.end, text);
   }
 
   /**
@@ -145,17 +118,10 @@
 
     const { start, end } = currentSelection.value;
     if (start === end) {
-      formatState.value = {
-        bold: false,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        highlight: false,
-      };
+      formatState.value = { ...EMPTY_FORMAT_STATE };
       return;
     }
 
-    // 使用编辑器的 getFormatState API
     formatState.value = editor.value.getFormatState(start, end);
   }
 
@@ -168,27 +134,10 @@
     const { start, end } = currentSelection.value;
     if (start === end) return;
 
-    console.log('[EditorCore] 应用样式前:', {
-      style,
-      start,
-      end,
-      text: currentSelection.value.text,
-      formatState: { ...formatState.value }
-    });
-
     editor.value.applyStyle(start, end, style);
 
-    const newHTML = getHTML();
-    console.log('[EditorCore] 应用样式后 HTML:', newHTML.substring(0, 200));
-
-    // 触发内容更新事件
-    emit('update:modelValue', newHTML);
-
-    // 更新格式状态
-    setTimeout(() => {
-      updateFormatState();
-      console.log('[EditorCore] 应用样式后格式状态:', { ...formatState.value });
-    }, 0);
+    emit('update:modelValue', getHTML());
+    setTimeout(updateFormatState, 0);
   }
 
   /**
@@ -200,54 +149,28 @@
     const { start, end } = currentSelection.value;
     if (start === end) return;
 
-    console.log('[EditorCore] 移除样式前:', {
-      style,
-      start,
-      end,
-      text: currentSelection.value.text,
-      formatState: { ...formatState.value }
-    });
-
     editor.value.removeStyle(start, end, style);
 
-    const newHTML = getHTML();
-    console.log('[EditorCore] 移除样式后 HTML:', newHTML.substring(0, 200));
-
-    // 触发内容更新事件
-    emit('update:modelValue', newHTML);
-
-    setTimeout(() => {
-      updateFormatState();
-      console.log('[EditorCore] 移除样式后格式状态:', { ...formatState.value });
-    }, 0);
+    emit('update:modelValue', getHTML());
+    setTimeout(updateFormatState, 0);
   }
 
   /**
    * 切换样式（根据当前状态决定应用或移除）
    */
   function toggleStyle(style: string) {
-    const currentState = formatState.value[style as keyof typeof formatState.value];
+    const styleKey = STYLE_KEYS[style];
+    if (!styleKey) return;
 
-    console.log('[EditorCore] 切换样式:', {
-      style,
-      currentState,
-      will: currentState ? '移除' : '应用',
-      persistentSelection: persistentSelection.value
-    });
-
-    if (currentState) {
-      // 当前有样式，则移除
+    if (formatState.value[styleKey]) {
       removeStyle(style);
     } else {
-      // 当前无样式，则应用
       applyStyle(style);
     }
 
-    // 样式操作后，恢复编辑器焦点并尝试恢复选区
+    /* 样式操作后，恢复编辑器焦点并尝试恢复选区 */
     if (editorContainer.value) {
       editorContainer.value.focus();
-
-      // 尝试根据持久化选区恢复原生选区
       if (persistentSelection.value) {
         restoreNativeSelection();
       }
@@ -260,11 +183,7 @@
   function restoreNativeSelection() {
     if (!editorContainer.value || !persistentSelection.value || !editor.value) return;
 
-    const { start, end } = persistentSelection.value;
-
-    // 使用编辑器创建 Range 并选中
-    const range = editor.value.createRange(start, end);
-    range.select();
+    editor.value.createRange(persistentSelection.value.start, persistentSelection.value.end).select();
   }
 
   /**

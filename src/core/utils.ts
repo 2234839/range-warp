@@ -3,6 +3,14 @@
  */
 
 /**
+ * 生成唯一 ID
+ * @param prefix ID 前缀（如 'bm'、'rev'）
+ */
+export function generateId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
  * 获取 Unicode 字符长度（使用 for...of 遍历代理对）
  * 正确处理 emoji 等多码点字符
  */

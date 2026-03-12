@@ -12,6 +12,7 @@ import type { IRangeAdapter } from '../adapters/IRangeAdapter';
 import { registerContainerConfig } from '../adapters/DOMRangeAdapter.js';
 import { Range } from '../models/Range';
 import { Bookmark, type BookmarkMetadata } from '../models/Bookmark';
+import { generateId } from '../utils';
 
 /** 注册书签容器配置（使适配器能识别书签元素并支持跨块拆分） */
 registerContainerConfig('bookmark', {
@@ -64,15 +65,14 @@ export class BookmarkService {
     const { name, range, author, customData } = options;
 
     const metadata: BookmarkMetadata = {
-      id: this.generateId(),
+      id: generateId('bm'),
       name,
       createTime: Date.now(),
       author,
       customData,
     };
 
-    const element = Bookmark.createElement(metadata);
-    range.wrapElement(() => element, { mode: 'wrap' });
+    range.wrapElement(() => Bookmark.createElement(metadata), { mode: 'wrap' });
 
     const bookmark = new Bookmark({ metadata, adapter: this._adapter });
     this.refresh();
@@ -172,13 +172,6 @@ export class BookmarkService {
     }
   }
 
-  /**
-   * 生成唯一ID
-   * @returns ID 字符串
-   */
-  private generateId(): string {
-    return `bm-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  }
 }
 
 export default BookmarkService;
