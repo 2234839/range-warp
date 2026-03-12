@@ -91,23 +91,26 @@ export class Editor {
       const range = this.createRange(start, end);
 
       if (asRevision) {
-        // 创建删除修订
+        /* 标记旧文本为删除修订（保留原文，视觉上标记删除） */
         this.revisions.createDelete({
           range,
           author: revisionAuthor || this.currentUser,
           comment: revisionComment,
         });
 
-        // 创建插入修订
-        const insertRange = this.createRange(start, start);
-        this.revisions.createInsert({
-          range: insertRange,
-          author: revisionAuthor || this.currentUser,
-          comment: revisionComment,
-        });
+        /* 插入新文本并包裹为插入修订 */
+        const newLength = [...replaceText].length;
+        if (newLength > 0) {
+          const insertAt = this.createRange(end, end);
+          insertAt.insertText(replaceText);
 
-        // 实际替换文本
-        range.replaceText(replaceText);
+          const insertRange = this.createRange(end, end + newLength);
+          this.revisions.createInsert({
+            range: insertRange,
+            author: revisionAuthor || this.currentUser,
+            comment: revisionComment,
+          });
+        }
       } else {
         range.replaceText(replaceText);
       }

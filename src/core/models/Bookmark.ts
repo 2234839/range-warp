@@ -9,6 +9,7 @@
  */
 
 import type { IRangeAdapter } from '../adapters/IRangeAdapter';
+import { getElementPosition } from '../utils';
 import { Range } from './Range';
 
 /** 书签元数据接口 */
@@ -57,13 +58,12 @@ export class Bookmark {
 
     if (!element) return null;
 
-    const start = this.calculateElementOffset(element);
-    const text = element.textContent || '';
-    const end = start + this.getUnicodeStringLength(text);
+    const pos = getElementPosition(element, container);
+    if (!pos) return null;
 
     return new Range({
-      start,
-      end,
+      start: pos.start,
+      end: pos.end,
       adapter: this._adapter,
     });
   }
@@ -101,47 +101,19 @@ export class Bookmark {
   }
 
   /**
-   * 删除书签
+   * 删除书签（仅移除书签标记元素，保留文本内容）
    */
   remove(): void {
-    const range = this.getRange();
-    if (range) {
-      range.unwrapElement('span');
-    }
-  }
-
-  /**
-   * 计算元素在文档中的字符下标
-   * @param element DOM 元素
-   * @returns 字符下标
-   */
-  private calculateElementOffset(element: Element): number {
-    const container = this._adapter.getContainer();
-    const range = document.createRange();
-
-    range.selectNodeContents(element);
-    const preRange = document.createRange();
-    preRange.selectNodeContents(container);
-    preRange.setEnd(range.startContainer, range.startOffset);
-
-    return this.getUnicodeStringLength(preRange.toString());
-  }
-
-  /**
-   * 获取 Unicode 字符长度
-   * @param str 字符串
-   * @returns 字符数
-   */
-  private getUnicodeStringLength(str: string): number {
-    return Array.from(str).length;
+    const selector = `[data-bookmark-id="${this.metadata.id}"]`;
+    this._adapter.removeElementsBySelector(selector, true);
   }
 
   /**
    * 创建书签 DOM 元素
-   * @param range Range 对象
+   * @param metadata 书签元数据
    * @returns DOM 元素
    */
-  static createElement(range: Range, metadata: BookmarkMetadata): HTMLElement {
+  static createElement(metadata: BookmarkMetadata): HTMLElement {
     const span = document.createElement('span');
     span.className = BOOKMARK_CLASS;
     span.setAttribute('data-bookmark-id', metadata.id);
@@ -153,9 +125,9 @@ export class Bookmark {
     }
 
     if (metadata.customData) {
-      Object.entries(metadata.customData).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(metadata.customData)) {
         span.setAttribute(`data-bookmark-${key}`, String(value));
-      });
+      }
     }
 
     return span;
@@ -223,8 +195,19 @@ export class Bookmark {
    * @returns 书签数组
    */
   static findByName(name: string, adapter: IRangeAdapter): Bookmark[] {
-    const all = Bookmark.findAll(adapter);
-    return all.filter((bookmark) => bookmark.metadata.name === name);
+    const container = adapter.getContainer();
+    const escapedName = name.replace(/"/g, '\\"');
+    const elements = container.querySelectorAll(`[data-bookmark-name="${escapedName}"]`);
+    const bookmarks: Bookmark[] = [];
+
+    for (const element of Array.from(elements)) {
+      const bookmark = Bookmark.fromElement(element, adapter);
+      if (bookmark) {
+        bookmarks.push(bookmark);
+      }
+    }
+
+    return bookmarks;
   }
 }
 

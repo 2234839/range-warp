@@ -2,13 +2,24 @@
  * Revision - 修订数据模型
  *
  * 核心职责：管理文档中的修订标记（插入/删除）
+ *
+ * 业务规则（accept/reject 的语义）：
+ *   新增修订（INSERT）- 标记一段文本为"新插入的"
+ *     · 接受（确认）：保留文本，解包修订标记
+ *     · 拒绝：移除文本（撤销新增）
+ *
+ *   删除修订（DELETE）- 标记一段文本为"待删除的"
+ *     · 接受（确认）：移除文本（执行删除）
+ *     · 拒绝：保留文本，解包修订标记（撤销删除）
+ *
  * 设计原则：
- * - 使用 DOM 元素包裹实现修订的持久化
+ * - 使用 DOM 元素包裹实现修订的持久化（元数据存储在 data-* 属性中）
  * - 动态计算位置，支持编辑后自动跟随
- * - 提供接受/拒绝修订的核心功能
+ * - 同一 revision ID 可对应多个 DOM 元素（跨块拆分场景）
  */
 
 import type { IRangeAdapter } from '../adapters/IRangeAdapter';
+import { getElementPosition } from '../utils';
 import { Range } from './Range';
 
 /** 修订类型 */
@@ -64,24 +75,33 @@ export class Revision {
 
   /**
    * 获取修订的 Range 对象
+   *
+   * 支持跨块修订：同一 revision ID 可对应多个元素，
+   * 合并所有元素的范围为一个 Range
+   *
    * @returns Range 实例
    */
   getRange(): Range | null {
     const container = this._adapter.getContainer();
-    const selector = this.metadata.type === RevisionType.INSERT
-      ? `.${REVISION_INSERT_CLASS}`
-      : `.${REVISION_DELETE_CLASS}`;
-    const element = container.querySelector(`${selector}[data-revision-id="${this.metadata.id}"]`);
+    const selector = this._getSelector();
+    const elements = container.querySelectorAll(selector);
 
-    if (!element) return null;
+    if (elements.length === 0) return null;
 
-    const start = this.calculateElementOffset(element);
-    const text = element.textContent || '';
-    const end = start + this.getUnicodeStringLength(text);
+    let minStart = Infinity;
+    let maxEnd = 0;
+
+    for (const element of Array.from(elements)) {
+      const pos = getElementPosition(element, container);
+      if (pos) {
+        minStart = Math.min(minStart, pos.start);
+        maxEnd = Math.max(maxEnd, pos.end);
+      }
+    }
 
     return new Range({
-      start,
-      end,
+      start: minStart,
+      end: maxEnd,
       adapter: this._adapter,
     });
   }
@@ -95,96 +115,87 @@ export class Revision {
     return range ? range.getText() : '';
   }
 
+  /** 构建本修订的 CSS 选择器 */
+  private _getSelector(): string {
+    return `[data-revision-id="${this.metadata.id}"]`;
+  }
+
   /**
-   * 接受修订
-   * - 插入修订：移除修订标记，保留内容
-   * - 删除修订：彻底删除内容
+   * 接受修订（确认修订意图）
+   *
+   * 业务规则:
+   * - 新增接受 → 保留文本，解包标记
+   * - 删除接受 → 移除文本，跨块时合并段落
    */
   accept(): void {
-    const range = this.getRange();
-    if (!range) return;
-
-    if (this.metadata.type === RevisionType.INSERT) {
-      // 插入修订：移除修订标记，保留内容
-      range.unwrapElement('span');
-    } else {
-      // 删除修订：彻底删除内容
-      range.delete();
-    }
+    this._resolve(true);
   }
 
   /**
-   * 拒绝修订
-   * - 插入修订：删除插入的内容
-   * - 删除修订：恢复被删除的内容
+   * 拒绝修订（撤销修订）
+   *
+   * 业务规则:
+   * - 新增拒绝 → 移除文本，跨块时合并段落
+   * - 删除拒绝 → 保留文本，解包标记
    */
   reject(): void {
-    const range = this.getRange();
-    if (!range) return;
+    this._resolve(false);
+  }
 
-    if (this.metadata.type === RevisionType.INSERT) {
-      // 插入修订：删除插入的内容
-      range.delete();
+  /**
+   * 统一的修订解决逻辑
+   *
+   * textRemoved 判定: (DELETE 且接受) 或 (INSERT 且拒绝)
+   * 即: 操作确认了修订的删除意图，或撤销了修订的新增意图
+   */
+  private _resolve(isAccept: boolean): void {
+    const selector = this._getSelector();
+    const textRemoved = (this.metadata.type === RevisionType.DELETE) === isAccept;
+
+    if (textRemoved) {
+      const affectedBlocks = this._getAffectedBlocks(selector);
+      this._adapter.removeElementsBySelector(selector, false);
+      if (affectedBlocks.length > 1) {
+        this._adapter.mergeBlocks(affectedBlocks);
+      }
     } else {
-      // 删除修订：恢复被删除的内容（移除修订标记）
-      range.unwrapElement('span');
+      this._adapter.removeElementsBySelector(selector, true);
     }
   }
 
   /**
-   * 计算元素在文档中的字符下标
-   * @param element DOM 元素
-   * @returns 字符下标
+   * 获取包含修订元素的块级元素（container 的直接子元素）
    */
-  private calculateElementOffset(element: Element): number {
+  private _getAffectedBlocks(selector: string): Element[] {
     const container = this._adapter.getContainer();
-    const range = document.createRange();
+    const elements = container.querySelectorAll(selector);
+    const blockSet = new Set<Element>();
 
-    range.selectNodeContents(element);
-    const preRange = document.createRange();
-    preRange.selectNodeContents(container);
-    preRange.setEnd(range.startContainer, range.startOffset);
+    for (const el of Array.from(elements)) {
+      let parent: Element | null = el.parentElement;
+      while (parent && parent !== container) {
+        if (parent.parentElement === container) {
+          blockSet.add(parent);
+          break;
+        }
+        parent = parent.parentElement;
+      }
+    }
 
-    return this.getUnicodeStringLength(preRange.toString());
+    return Array.from(blockSet);
   }
 
   /**
-   * 获取 Unicode 字符长度
-   * @param str 字符串
-   * @returns 字符数
-   */
-  private getUnicodeStringLength(str: string): number {
-    return Array.from(str).length;
-  }
-
-  /**
-   * 创建插入修订 DOM 元素
-   * @param range Range 对象
+   * 创建修订 DOM 元素
    * @param metadata 修订元数据
    * @returns DOM 元素
    */
-  static createInsertElement(range: Range, metadata: RevisionMetadata): HTMLElement {
+  static createElement(metadata: RevisionMetadata): HTMLElement {
     const span = document.createElement('span');
-    span.className = REVISION_INSERT_CLASS;
+    span.className = metadata.type === RevisionType.INSERT
+      ? REVISION_INSERT_CLASS
+      : REVISION_DELETE_CLASS;
     this.setCommonAttributes(span, metadata);
-    return span;
-  }
-
-  /**
-   * 创建删除修订 DOM 元素
-   * @param range Range 对象
-   * @param metadata 修订元数据
-   * @returns DOM 元素
-   */
-  static createDeleteElement(range: Range, metadata: RevisionMetadata): HTMLElement {
-    const span = document.createElement('span');
-    span.className = REVISION_DELETE_CLASS;
-    this.setCommonAttributes(span, metadata);
-
-    // 删除修订使用 <del> 标签包裹内容
-    const del = document.createElement('del');
-    span.appendChild(del);
-
     return span;
   }
 
@@ -204,9 +215,9 @@ export class Revision {
     }
 
     if (metadata.customData) {
-      Object.entries(metadata.customData).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(metadata.customData)) {
         element.setAttribute(`data-revision-${key}`, String(value));
-      });
+      }
     }
   }
 
@@ -236,25 +247,27 @@ export class Revision {
 
   /**
    * 查询所有修订
+   *
+   * 同一 revision ID 可能对应多个 DOM 元素（跨块修订），
+   * 每个 ID 只返回一个 Revision 实例
+   *
    * @param adapter 适配器实例
    * @returns 修订数组
    */
   static findAll(adapter: IRangeAdapter): Revision[] {
     const container = adapter.getContainer();
-    const insertElements = container.querySelectorAll(`.${REVISION_INSERT_CLASS}`);
-    const deleteElements = container.querySelectorAll(`.${REVISION_DELETE_CLASS}`);
+    const elements = container.querySelectorAll(
+      `.${REVISION_INSERT_CLASS}, .${REVISION_DELETE_CLASS}`
+    );
+    const seenIds = new Set<string>();
     const revisions: Revision[] = [];
 
-    for (const element of Array.from(insertElements)) {
+    for (const element of Array.from(elements)) {
+      const id = element.getAttribute('data-revision-id');
+      if (!id || seenIds.has(id)) continue;
       const revision = Revision.fromElement(element, adapter);
       if (revision) {
-        revisions.push(revision);
-      }
-    }
-
-    for (const element of Array.from(deleteElements)) {
-      const revision = Revision.fromElement(element, adapter);
-      if (revision) {
+        seenIds.add(id);
         revisions.push(revision);
       }
     }
@@ -285,13 +298,38 @@ export class Revision {
    * @returns 修订数组
    */
   static findInRange(start: number, end: number, adapter: IRangeAdapter): Revision[] {
-    const all = Revision.findAll(adapter);
-    const result: Revision[] = [];
+    const container = adapter.getContainer();
+    const elements = container.querySelectorAll(
+      `.${REVISION_INSERT_CLASS}, .${REVISION_DELETE_CLASS}`
+    );
 
-    for (const revision of all) {
-      const range = revision.getRange();
-      if (range && range.start < end && range.end > start) {
-        result.push(revision);
+    /* 单次遍历：按 ID 分组并计算范围边界，避免 N+1 查询 */
+    const idRanges = new Map<string, { minStart: number; maxEnd: number; sampleElement: Element }>();
+
+    for (const element of Array.from(elements)) {
+      const id = element.getAttribute('data-revision-id');
+      if (!id) continue;
+
+      const pos = getElementPosition(element, container);
+      if (!pos) continue;
+
+      const existing = idRanges.get(id);
+      if (existing) {
+        existing.minStart = Math.min(existing.minStart, pos.start);
+        existing.maxEnd = Math.max(existing.maxEnd, pos.end);
+      } else {
+        idRanges.set(id, { minStart: pos.start, maxEnd: pos.end, sampleElement: element });
+      }
+    }
+
+    /* 仅创建与目标范围重叠的 Revision 对象 */
+    const result: Revision[] = [];
+    for (const [, info] of idRanges) {
+      if (info.minStart < end && info.maxEnd > start) {
+        const revision = Revision.fromElement(info.sampleElement, adapter);
+        if (revision) {
+          result.push(revision);
+        }
       }
     }
 

@@ -9,8 +9,17 @@
  */
 
 import type { IRangeAdapter } from '../adapters/IRangeAdapter';
+import { registerContainerConfig } from '../adapters/DOMRangeAdapter.js';
 import { Range } from '../models/Range';
 import { Bookmark, type BookmarkMetadata } from '../models/Bookmark';
+
+/** 注册书签容器配置（使适配器能识别书签元素并支持跨块拆分） */
+registerContainerConfig('bookmark', {
+  tagName: 'span',
+  attributeSelector: '.bookmark',
+  display: 'inline',
+  crossBlock: 'split',
+});
 
 export interface CreateBookmarkOptions {
   /** 书签名称 */
@@ -62,8 +71,8 @@ export class BookmarkService {
       customData,
     };
 
-    const element = Bookmark.createElement(range, metadata);
-    range.wrapElement(() => element);
+    const element = Bookmark.createElement(metadata);
+    range.wrapElement(() => element, { mode: 'wrap' });
 
     const bookmark = new Bookmark({ metadata, adapter: this._adapter });
     this.refresh();

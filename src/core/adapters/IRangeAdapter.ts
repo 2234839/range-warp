@@ -4,6 +4,22 @@
  * 核心职责：统一不同编辑器的文本操作 API
  * 设计原则：依赖倒置 - 上层业务逻辑依赖此抽象接口，而非具体实现
  */
+/**
+ * 包裹选项
+ *
+ * 参考 ProseMirror 的 AddMarkStep 设计:
+ * - 新增 mark 时，先移除重叠的同类型 mark，再添加新的 → 天然合并
+ * - 包裹行为由调用方决定，而非容器自身配置
+ */
+export interface WrapOptions {
+  /**
+   * 包裹模式
+   * 'nest' (默认): 新元素嵌套在已有容器内，normalize 会合并冗余嵌套
+   * 'wrap': 新元素包裹已有容器，将已有容器移入新容器内部
+   */
+  mode?: 'wrap' | 'nest';
+}
+
 export interface IRangeAdapter {
   /**
    * 获取指定范围内的文本内容
@@ -53,11 +69,17 @@ export interface IRangeAdapter {
 
   /**
    * 用 DOM 元素包裹指定范围的文本
+   *
+   * 参考 ProseMirror 的 AddMarkStep 设计:
+   * - 默认 mode='nest': 新元素嵌套在已有容器内，通过 normalize 合并冗余嵌套
+   * - mode='wrap': 新元素包裹已有容器（适用于修订、书签等需要外层包裹的场景）
+   *
    * @param start 起始字符下标
    * @param end 结束字符下标
    * @param elementCreator 元素创建函数
+   * @param options 包裹选项
    */
-  wrapElement(start: number, end: number, elementCreator: () => Element): void;
+  wrapElement(start: number, end: number, elementCreator: () => Element, options?: WrapOptions): void;
 
   /**
    * 移除指定范围的元素包裹，保留文本内容
@@ -80,6 +102,14 @@ export interface IRangeAdapter {
    * @returns 字符总数（基于 Unicode 字符）
    */
   getDocumentLength(): number;
+
+  /**
+   * 获取指定范围内的块级元素
+   * @param start 起始字符下标
+   * @param end 结束字符下标
+   * @returns 块级元素数组
+   */
+  getBlockElementsInRange(start: number, end: number): Element[];
 
   /**
    * 查找文本在文档中的所有位置
@@ -115,4 +145,21 @@ export interface IRangeAdapter {
    * @param end 结束字符下标
    */
   normalize(start: number, end: number): void;
+
+  /**
+   * 移除匹配选择器的元素
+   * @param selector CSS 选择器
+   * @param keepChildren true=解包（保留子节点），false=删除整个元素及内容
+   */
+  removeElementsBySelector(selector: string, keepChildren: boolean): void;
+
+  /**
+   * 合并连续的块级元素
+   *
+   * 将传入的块级元素合并为一个：所有内容移入第一个块，其余块移除。
+   * 用于跨块修订解决后（文本被移除）的段落结构清理。
+   *
+   * @param blockElements 需要合并的块级元素
+   */
+  mergeBlocks(blockElements: Element[]): void;
 }

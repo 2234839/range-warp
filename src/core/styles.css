@@ -47,10 +47,6 @@
   background-color: #fecaca;
 }
 
-.revision-delete del {
-  text-decoration: line-through;
-  color: #ef4444;
-}
 
 /* ========== 文本格式样式 ========== */
 strong,
