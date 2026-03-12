@@ -2,7 +2,7 @@
  * DOMRangeAdapter 综合测试套件
  */
 import { JSDOM } from 'jsdom';
-import { DOMRangeAdapter } from '../core/adapters/DOMRangeAdapter.js';
+import { DOMRangeAdapter, registerContainerConfig } from '../core/adapters/DOMRangeAdapter.js';
 
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
   url: 'http://localhost',
@@ -16,6 +16,16 @@ global.Node = dom.window.Node;
 global.Text = dom.window.Text;
 global.Range = dom.window.Range;
 global.NodeFilter = dom.window.NodeFilter;
+
+/* 注册 mergeAdjacent 测试配置 */
+registerContainerConfig('test-merge-yes', {
+  tagName: 'span', attributeSelector: '.test-merge-yes',
+  idAttribute: 'data-test-id', mergeAdjacent: true,
+});
+registerContainerConfig('test-merge-no', {
+  tagName: 'span', attributeSelector: '.test-merge-no',
+  idAttribute: 'data-test-id',
+});
 
 function normalizeHTML(html: string): string {
   return html.replace(/\s+/g, '').replace(/>\s+</g, '><');
@@ -122,6 +132,16 @@ const testCases: TestCase[] = [
     end: 4,
     expectedHTML: '<strong>text</strong>',
     description: '移除冗余的嵌套标签'
+  },
+
+  {
+    name: 'Test 3.1.1',
+    initialHTML: '<strong><strong><strong>text</strong></strong></strong>',
+    operation: (adapter, start, end) => adapter.normalize(start, end),
+    start: 0,
+    end: 4,
+    expectedHTML: '<strong>text</strong>',
+    description: '三层嵌套标签应展平为一层'
   },
 
   {
@@ -730,6 +750,44 @@ const testCases: TestCase[] = [
     end: 0,
     expectedHTML: '<strong>hello world</strong>',
     description: '移除空格处容器后重新应用应合并'
+  },
+
+  // ==================== mergeAdjacent 容器合并 ====================
+  {
+    name: 'Test 25.1',
+    initialHTML: '<span class="test-merge-yes" data-test-id="id-1">ab</span><span class="test-merge-yes" data-test-id="id-2">cd</span><span class="test-merge-yes" data-test-id="id-3">ef</span>',
+    operation: (adapter, start, end) => adapter.normalize(start, end),
+    start: 0,
+    end: 6,
+    expectedHTML: '<span class="test-merge-yes" data-test-id="id-1">abcdef</span>',
+    description: 'mergeAdjacent: true 时，不同 ID 的相邻容器应合并（保留第一个 ID）'
+  },
+  {
+    name: 'Test 25.2',
+    initialHTML: '<span class="test-merge-no" data-test-id="id-1">ab</span><span class="test-merge-no" data-test-id="id-2">cd</span>',
+    operation: (adapter, start, end) => adapter.normalize(start, end),
+    start: 0,
+    end: 4,
+    expectedHTML: '<span class="test-merge-no" data-test-id="id-1">ab</span><span class="test-merge-no" data-test-id="id-2">cd</span>',
+    description: 'mergeAdjacent: false (默认) 时，不同 ID 的相邻容器不应合并'
+  },
+  {
+    name: 'Test 25.3',
+    initialHTML: '<span class="test-merge-no" data-test-id="id-1">ab</span><span class="test-merge-no" data-test-id="id-1">cd</span>',
+    operation: (adapter, start, end) => adapter.normalize(start, end),
+    start: 0,
+    end: 4,
+    expectedHTML: '<span class="test-merge-no" data-test-id="id-1">abcd</span>',
+    description: 'mergeAdjacent: false 时，相同 ID 的相邻容器仍应合并'
+  },
+  {
+    name: 'Test 25.4',
+    initialHTML: '<span class="test-merge-yes" data-test-id="id-1">ab</span>x<span class="test-merge-yes" data-test-id="id-2">cd</span>',
+    operation: (adapter, start, end) => adapter.normalize(start, end),
+    start: 0,
+    end: 5,
+    expectedHTML: '<span class="test-merge-yes" data-test-id="id-1">ab</span>x<span class="test-merge-yes" data-test-id="id-2">cd</span>',
+    description: 'mergeAdjacent: true 时，不连续的容器不应合并'
   },
 ];
 

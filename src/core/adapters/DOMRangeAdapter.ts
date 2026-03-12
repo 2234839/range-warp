@@ -51,6 +51,22 @@ export interface ContainerTagConfig {
    * true (默认): 正常复制
    */
   copyable?: boolean;
+  /**
+   * 相邻的相同配置名容器是否自动合并
+   * true: normalize 时将相邻的同配置名容器合并为一个（忽略 ID 差异）
+   * false (默认): 仅在配置名和 ID 都相同时才合并
+   *
+   * 适用场景：
+   * - 修订 (revision-insert/delete): 设为 true，嵌套创建修订时自动合并为单个修订
+   * - 书签 (bookmark): 保持 false，相邻书签语义上应独立存在
+   */
+  mergeAdjacent?: boolean;
+  /**
+   * normalize 时是否移除空标签
+   * true (默认): normalize 时自动移除该类型的空容器元素
+   * false: 保留空容器（适用于需要占位标记的场景，如空书签）
+   */
+  removeEmpty?: boolean;
 }
 
 /** 容器到标签的映射配置（支持动态注册） */
@@ -128,17 +144,25 @@ function getConfigNameForElement(element: Element): string | undefined {
 /**
  * 检查两个元素是否属于相同的容器配置（同类型容器）
  *
- * 对于样式标签（bold、italic 等），相同配置名即为同类型，normalize 时合并冗余嵌套。
- * 对于带 idAttribute 的容器（修订、书签等），按 ID 区分不同语义实体。
+ * 判断规则：
+ * 1. 配置名不同 → 不同类型
+ * 2. 配置名相同 + 无 idAttribute → 同类型（如样式标签）
+ * 3. 配置名相同 + 有 idAttribute + mergeAdjacent 为 true → 同类型（忽略 ID 差异）
+ * 4. 配置名相同 + 有 idAttribute + mergeAdjacent 为 false → 按 ID 区分
  */
 function isSameContainerType(elem1: Element, elem2: Element): boolean {
   const name1 = getConfigNameForElement(elem1);
   const name2 = getConfigNameForElement(elem2);
   if (name1 === undefined || name1 !== name2) return false;
 
-  /* 带 idAttribute 的容器按 ID 区分，不同 ID 的不算同类型 */
   const config = CONTAINER_CONFIGS[name1];
-  const idAttr = config?.idAttribute;
+  if (!config) return false;
+
+  /* mergeAdjacent 为 true 时，忽略 ID 差异直接合并 */
+  if (config.mergeAdjacent) return true;
+
+  /* 带 idAttribute 的容器按 ID 区分，不同 ID 的不算同类型 */
+  const idAttr = config.idAttribute;
   if (idAttr) {
     const id1 = elem1.getAttribute(idAttr);
     const id2 = elem2.getAttribute(idAttr);
@@ -936,7 +960,11 @@ export class DOMRangeAdapter implements IRangeAdapter {
       }
 
       if (element.textContent === '') {
-        element.remove();
+        const configName = getConfigNameForElement(element);
+        const config = configName ? CONTAINER_CONFIGS[configName] : undefined;
+        if (config?.removeEmpty !== false) {
+          element.remove();
+        }
       }
     }
 

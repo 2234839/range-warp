@@ -5,13 +5,13 @@
   interface TreeNode {
     key: string;
     depth: number;
-    type: 'tag-open' | 'tag-close' | 'comment';
+    type: 'tag-open' | 'tag-close' | 'text' | 'comment';
     tag: string;
     attrs: Array<{ name: string; value: string }>;
+    /** 文本节点内容 */
+    text?: string;
     /** 空元素（无子节点），渲染为 <tag /> */
     selfClosing: boolean;
-    /** 内联文本（纯文本子节点），和开始标签同行显示 */
-    inlineText?: string;
     /** 子元素数量，折叠时显示提示 */
     childElementCount: number;
     /** 在编辑器 DOM 中查找此节点所需的路径（深度优先遍历索引） */
@@ -46,7 +46,7 @@
   /**
    * 将 HTML 解析为 DOM 树节点列表
    *
-   * 使用 DOMParser 解析 HTML 字符串，文本节点内联到父标签行
+   * 使用 DOMParser 解析 HTML 字符串，元素节点和文本节点都作为独立条目
    * 每个节点记录 path 用于在编辑器 live DOM 中定位
    */
   const nodes = computed<TreeNode[]>(() => {
@@ -63,19 +63,7 @@
       result.push({ ...node, key: String(keyCounter++) });
     }
 
-    /** 提取纯文本子节点的内容 */
-    function getInlineText(element: Element): string {
-      const texts: string[] = [];
-      for (const child of element.childNodes) {
-        if (child.nodeType === Node.TEXT_NODE) {
-          const t = child.textContent || '';
-          if (t.trim()) texts.push(t);
-        }
-      }
-      return texts.join(' ');
-    }
-
-    /** 统计子元素数量 */
+    /** 统计子元素数量（仅 Element 子节点） */
     function getChildElementCount(element: Element): number {
       let count = 0;
       for (const child of element.childNodes) {
@@ -84,16 +72,35 @@
       return count;
     }
 
+    /** 提取元素内所有直接文本节点的内容（用于纯文本元素的紧凑显示） */
+    function getTextContent(element: Element): string {
+      const parts: string[] = [];
+      for (const child of element.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          parts.push(child.textContent || '');
+        }
+      }
+      return parts.join('');
+    }
+
     function walkNode(node: Node, depth: number) {
-      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || '';
+        if (!text) return;
+        addNode({
+          type: 'text', depth,
+          tag: '', attrs: [], text, selfClosing: true,
+          childElementCount: 0, path: [-1],
+        });
+        return;
+      }
 
       if (node.nodeType === Node.COMMENT_NODE) {
         addNode({
           type: 'comment', depth, tag: '!--',
           attrs: [], selfClosing: true,
-          inlineText: node.textContent || '',
-          childElementCount: 0,
-          path: [-1],
+          text: node.textContent || '',
+          childElementCount: 0, path: [-1],
         });
         return;
       }
@@ -108,19 +115,20 @@
 
       const isEmpty = node.childNodes.length === 0;
       const childElementCount = getChildElementCount(node);
+      /** 是否为纯文本元素（只有文本子节点，无元素子节点） */
+      const isTextOnly = childElementCount === 0;
 
       if (isEmpty) {
         /** 空元素 → <tag /> */
         addNode({ type: 'tag-open', depth, tag, attrs, selfClosing: true, childElementCount: 0, path: [currentIndex] });
-      } else if (childElementCount === 0) {
-        /** 纯文本 → <tag>text</tag> 单行显示 */
+      } else if (isTextOnly) {
+        /** 纯文本元素 → <tag>text</tag> 单行紧凑显示 */
         addNode({
           type: 'tag-open', depth, tag, attrs, selfClosing: false,
-          inlineText: getInlineText(node), childElementCount: 0,
-          path: [currentIndex],
+          text: getTextContent(node), childElementCount: 0, path: [currentIndex],
         });
       } else {
-        /** 有子元素 → 支持折叠 */
+        /** 有子元素 → 支持折叠，文本节点作为独立条目渲染 */
         addNode({ type: 'tag-open', depth, tag, attrs, selfClosing: false, childElementCount, path: [currentIndex] });
         for (const child of node.childNodes) {
           walkNode(child, depth + 1);
@@ -219,8 +227,13 @@
         </span>
         <span v-else class="inline-block w-3 mr-0.5"></span>
 
+        <!-- 文本节点 -->
+        <template v-if="node.type === 'text'">
+          <span class="text-green-700">"{{ node.text }}"</span>
+        </template>
+
         <!-- 开始标签 -->
-        <template v-if="node.type === 'tag-open'">
+        <template v-else-if="node.type === 'tag-open'">
           <span class="text-gray-400">&lt;</span>
           <span class="text-blue-600">{{ node.tag }}</span>
           <template v-for="(attr, i) in node.attrs" :key="i">
@@ -230,10 +243,10 @@
           <template v-if="node.selfClosing">
             <span class="text-gray-400"> /&gt;</span>
           </template>
-          <!-- 纯文本 → <tag>text</tag> -->
-          <template v-else-if="node.inlineText">
+          <!-- 纯文本元素 → <tag>text</tag> 单行紧凑 -->
+          <template v-else-if="node.text !== undefined">
             <span class="text-gray-400">&gt;</span>
-            <span class="text-green-700">{{ node.inlineText }}</span>
+            <span class="text-green-700">{{ node.text }}</span>
             <span class="text-gray-400">&lt;/</span>
             <span class="text-blue-600">{{ node.tag }}</span>
             <span class="text-gray-400">&gt;</span>
@@ -252,7 +265,7 @@
         </template>
         <!-- 注释 -->
         <template v-else-if="node.type === 'comment'">
-          <span class="text-gray-400">&lt;!--</span><span class="text-gray-500">{{ node.inlineText }}</span><span class="text-gray-400">--&gt;</span>
+          <span class="text-gray-400">&lt;!--</span><span class="text-gray-500">{{ node.text }}</span><span class="text-gray-400">--&gt;</span>
         </template>
       </div>
     </div>

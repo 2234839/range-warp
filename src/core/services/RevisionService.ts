@@ -23,6 +23,7 @@ registerContainerConfig('revision-insert', {
   idAttribute: 'data-revision-id',
   splitRepair: 'none',
   copyable: false,
+  mergeAdjacent: true,
 });
 registerContainerConfig('revision-delete', {
   tagName: 'span',
@@ -32,6 +33,7 @@ registerContainerConfig('revision-delete', {
   idAttribute: 'data-revision-id',
   splitRepair: 'none',
   copyable: false,
+  mergeAdjacent: true,
 });
 
 export interface CreateRevisionOptions {

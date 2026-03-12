@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { ref, onMounted, useTemplateRef } from 'vue';
-  import { useEventListener } from '@vueuse/core';
+  import { useEventListener, useDebounceFn } from '@vueuse/core';
   import { Editor, DOMRangeAdapter, BLOCK_TAG_NAMES, getNonCopyableSelector } from '../core/index';
   import type { Editor as EditorType } from '../core/index';
   import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition } from './editor-utils';
@@ -170,13 +170,17 @@
     syncSelectionFromDOM();
   }
 
+  /** 防抖修复跨块容器的非连续分片（避免每次按键都执行 DOM 遍历） */
+  const debouncedRepair = useDebounceFn(() => {
+    editor.value?.repairSplitContainers();
+  }, 300);
+
   /**
    * 处理输入事件
    */
   function handleInput() {
     emit('update:modelValue', getHTML());
-    /** 修复跨块容器的非连续分片（如书签断裂） */
-    editor.value?.repairSplitContainers();
+    debouncedRepair();
   }
 
   /** 不可复制容器的 CSS 选择器 */

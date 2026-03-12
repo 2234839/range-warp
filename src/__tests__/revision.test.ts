@@ -139,14 +139,14 @@ test('1.4 创建多个独立新增修订', () => {
   );
 });
 
-test('1.5 创建多个相邻新增修订 - 不合并', () => {
+test('1.5 创建多个相邻新增修订 - 自动合并', () => {
   const { container, service, createRange } = createEnv('Hello World');
   service.createInsert({ range: createRange(0, 5), author: 'test' });
   service.createInsert({ range: createRange(5, 11), author: 'test' });
 
   const revisions = service.getAll();
   return (
-    assert(revisions.length === 2, `修订数量错误: ${revisions.length}`) &&
+    assert(revisions.length === 1, `修订数量错误: ${revisions.length}`) &&
     assert(
       container.textContent === 'Hello World',
       `全文错误: "${container.textContent}"`
@@ -653,7 +653,7 @@ test('9.5 acceptAll / rejectAll - 批量操作', () => {
   service.createInsert({ range: createRange(1, 2), author: 'test' });
 
   const acceptCount = service.acceptAll();
-  assert(acceptCount === 2, `acceptAll 数量错误: ${acceptCount}`);
+  assert(acceptCount === 1, `acceptAll 数量错误: ${acceptCount}`);
   assert(service.getAll().length === 0, 'acceptAll 后修订列表不为空');
   assert(
     container.textContent === 'AB',
@@ -666,7 +666,7 @@ test('9.5 acceptAll / rejectAll - 批量操作', () => {
 
   const rejectCount = service.rejectAll();
   return (
-    assert(rejectCount === 2, `rejectAll 数量错误: ${rejectCount}`) &&
+    assert(rejectCount === 1, `rejectAll 数量错误: ${rejectCount}`) &&
     assert(service.getAll().length === 0, 'rejectAll 后修订列表不为空') &&
     assert(container.textContent === '', `内容应为空: "${container.textContent}"`)
   );
@@ -889,55 +889,48 @@ test('12.2 同区域删除后删除 - 新修订覆盖旧修订', () => {
   );
 });
 
-test('12.3 新增后部分新增 - 保留非重叠部分', () => {
-  /* insert(A) [0,4]=abcd, insert(B) [1,3]=bc → "a" 保持 A, "bc" 交给 B, "d" 保持 A */
+test('12.3 新增后部分新增 - 相邻同类型自动合并', () => {
+  /* insert(A) [0,4]=abcd, insert(B) [1,3]=bc → mergeAdjacent: true 时全部合并为一个 */
   const { container, service, createRange } = createEnv('abcd');
 
   service.createInsert({ range: createRange(0, 4), author: 'Alice' });
   service.createInsert({ range: createRange(1, 3), author: 'Bob' });
 
   const revisions = service.getAll();
-  const bobs = revisions.filter(r => r.metadata.author === 'Bob');
-  const alices = revisions.filter(r => r.metadata.author === 'Alice');
-
   return (
     assert(!container.querySelector('.revision-insert .revision-insert'), '产生了嵌套') &&
-    assert(bobs.length === 1 && bobs[0].getText() === 'bc', `Bob 修订内容错误: "${bobs[0]?.getText()}"`) &&
-    assert(alices.length === 2, `Alice 修订数量错误: ${alices.length}`)
+    assert(revisions.length === 1, `修订数量错误: ${revisions.length}`) &&
+    assert(revisions[0].getText() === 'abcd', `修订内容错误: "${revisions[0]?.getText()}"`)
   );
 });
 
-test('12.4 删除后部分删除 - 保留非重叠部分', () => {
-  /* delete(A) [0,4]=abcd, delete(B) [1,3]=bc → "a" 保持 A, "bc" 交给 B, "d" 保持 A */
+test('12.4 删除后部分删除 - 相邻同类型自动合并', () => {
+  /* delete(A) [0,4]=abcd, delete(B) [1,3]=bc → mergeAdjacent: true 时全部合并为一个 */
   const { container, service, createRange } = createEnv('abcd');
 
   service.createDelete({ range: createRange(0, 4), author: 'Alice' });
   service.createDelete({ range: createRange(1, 3), author: 'Bob' });
 
   const revisions = service.getAll();
-  const bobs = revisions.filter(r => r.metadata.author === 'Bob');
-  const alices = revisions.filter(r => r.metadata.author === 'Alice');
-
   return (
     assert(!container.querySelector('.revision-delete .revision-delete'), '产生了嵌套') &&
-    assert(bobs.length === 1 && bobs[0].getText() === 'bc', `Bob 修订内容错误: "${bobs[0]?.getText()}"`) &&
-    assert(alices.length === 2, `Alice 修订数量错误: ${alices.length}`)
+    assert(revisions.length === 1, `修订数量错误: ${revisions.length}`) &&
+    assert(revisions[0].getText() === 'abcd', `修订内容错误: "${revisions[0]?.getText()}"`)
   );
 });
 
-test('12.5 新增后中间新增 - 保留前后部分', () => {
-  /* insert(A) [0,4]=abcd, insert(B) [1,3]=bc → "a"+"d" 保持 A, "bc" 交给 B */
+test('12.5 新增后中间新增 - 相邻同类型自动合并', () => {
+  /* insert(A) [0,4]=abcd, insert(B) [1,3]=bc → mergeAdjacent: true 时全部合并为一个 */
   const { container, service, createRange } = createEnv('abcd');
 
   service.createInsert({ range: createRange(0, 4), author: 'Alice' });
   service.createInsert({ range: createRange(1, 3), author: 'Bob' });
 
   const revisions = service.getAll();
-  const bobs = revisions.filter(r => r.metadata.author === 'Bob');
-
   return (
     assert(!container.querySelector('.revision-insert .revision-insert'), '产生了嵌套') &&
-    assert(bobs.length === 1 && bobs[0].getText() === 'bc', `Bob 修订内容错误: "${bobs[0]?.getText()}"`)
+    assert(revisions.length === 1, `修订数量错误: ${revisions.length}`) &&
+    assert(revisions[0].getText() === 'abcd', `修订内容错误: "${revisions[0]?.getText()}"`)
   );
 });
 
