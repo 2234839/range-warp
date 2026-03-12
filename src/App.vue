@@ -2,11 +2,8 @@
   import { ref, watch, onMounted, computed } from 'vue';
   import { useStorage, useDebounceFn, useIntervalFn } from '@vueuse/core';
   import EditorCore from './components/EditorCore.vue';
+  import DomTreePanel from './components/DomTreePanel.vue';
   import diff from 'fast-diff';
-  import Prism from 'prismjs';
-  import 'prismjs/themes/prism-tomorrow.css';
-  import 'prismjs/components/prism-markup';
-  import { html as formatHTML } from 'js-beautify';
   import { getUnicodeStringLength } from './core/utils';
 
   /** EditorCore 组件引用 */
@@ -15,33 +12,13 @@
   /** 编辑器内容 - 使用 localStorage 持久化 */
   const editorContent = useStorage<string>('range-warp-editor-content', '', localStorage);
 
-  /** 格式化后的 HTML（使用 js-beautify） */
-  const formattedHTML = computed(() => {
-    if (!editorContent.value) return '';
-
-    try {
-      return formatHTML(editorContent.value, {
-        indent_size: 2,
-        wrap_line_length: 0,
-        // 将默认的 inline 标签设为空数组，这样所有标签都会换行和缩进
-        inline: [],
-        // 不排除任何标签的格式化
-        unformatted: [],
-        end_with_newline: false,
-        indent_inner_html: true,
-        indent_body_inner_html: true,
-      });
-    } catch (e) {
-      console.error('HTML 格式化失败:', e);
-      return editorContent.value;
-    }
-  });
-
-  /** 高亮后的 HTML（使用 Prism 语法高亮） */
-  const highlightedHTML = computed(() => {
-    if (!formattedHTML.value) return '<span class="text-gray-500">(空内容)</span>';
-    return Prism.highlight(formattedHTML.value, Prism.languages.markup, 'markup');
-  });
+  /**
+   * DOM 树节点点击 → 在编辑器中选中对应 range
+   */
+  function handleTreeSelect(start: number, end: number) {
+    if (!editorRef.value?.editor) return;
+    editorRef.value.editor.createRange(start, end).select();
+  }
 
   /** 保存状态：'idle' | 'saving' | 'saved' */
   const saveStatus = ref<'idle' | 'saving' | 'saved'>('idle');
@@ -91,8 +68,8 @@
   /** 当前激活的 Tab */
   const activeTab = ref<'info' | 'bookmarks' | 'revisions'>('info');
 
-  /** 当前选中的文本范围 - 使用编辑器内部的持久化选区 */
-  const selectedRange = computed(() => editorRef.value?.currentSelection || { start: 0, end: 0, text: '' });
+  /** 当前选中的文本范围 - 使用持久化选区（不受编辑器外部操作影响） */
+  const selectedRange = computed(() => editorRef.value?.persistentSelection || { start: 0, end: 0, text: '' });
 
   /** 编辑器实例（便捷访问） */
   const editor = computed(() => editorRef.value?.editor);
@@ -330,19 +307,16 @@
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-gray-50">
+  <div class="h-screen flex flex-col bg-gray-100">
     <!-- 主要内容区域 -->
-    <main class="flex-1 py-3 px-4">
-      <div class="max-w-7xl mx-auto">
-        <div class="flex gap-1">
-          <!-- 左侧：HTML 源码面板 -->
-          <div class="w-80 bg-white rounded-lg border border-gray-300 shadow-sm flex flex-col">
-            <div class="p-3 border-b border-gray-200">
-              <h2 class="text-sm font-semibold text-gray-800">HTML 源码</h2>
-            </div>
-            <div class="flex-1 overflow-auto">
-              <pre class="language-html h-full m-0! text-sm!"><code class="text-xs block p-3" v-html="highlightedHTML"></code></pre>
-            </div>
+    <main class="flex-1 p-2 min-h-0">
+      <div class="flex gap-2 h-full">
+        <!-- 左侧：DOM 树面板 -->
+        <div class="w-72 shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col min-h-0">
+          <div class="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">DOM 树</h2>
+          </div>
+          <DomTreePanel :html="editorContent" @select="handleTreeSelect" />
             <!-- 保存状态 -->
             <div class="px-4 py-2 border-t border-gray-200 text-xs flex items-center justify-between">
               <span v-if="saveStatusText" :class="[
@@ -365,7 +339,7 @@
             @update:model-value="(html) => { editorContent = html; triggerSave(); }" />
 
           <!-- 右侧：信息面板 -->
-          <div class="w-80 bg-white rounded-lg border border-gray-300 shadow-sm flex flex-col">
+          <div class="w-72 shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col min-h-0">
             <!-- Tab 标签 -->
             <div class="flex border-b border-gray-200">
               <button @click="activeTab = 'info'"
@@ -546,25 +520,15 @@
             </div>
           </div>
         </div>
-      </div>
     </main>
 
     <!-- 底部 -->
-    <footer class="bg-gray-800 text-white py-6 px-4 mt-auto">
-      <div class="max-w-6xl mx-auto text-center">
-        <p class="mb-4">
-          <router-link to="/demo"
-            class="inline-flex items-center gap-2 text-blue-400 no-underline py-2 px-4 border border-blue-400 rounded-lg transition-all duration-300 bg-blue-400/10 hover:bg-blue-400 hover:text-white hover:-translate-y-0.5 hover:shadow-lg">
-            📦 查看组件库演示
-          </router-link>
-        </p>
-        <p class="text-sm opacity-80">
-          RangeWrap © 2024 | 基于 DOM Range API 的富文本编辑器
-        </p>
-        <p class="text-xs opacity-60 mt-2">
-          架构：适配器模式 + 依赖倒置原则
-        </p>
-      </div>
+    <footer class="bg-gray-800 text-white px-4 py-2 flex items-center justify-between text-xs">
+      <span class="opacity-60">RangeWrap - 基于 DOM Range API 的富文本编辑器</span>
+      <router-link to="/demo"
+        class="text-blue-400 no-underline hover:text-blue-300 transition-colors">
+        查看组件库演示
+      </router-link>
     </footer>
   </div>
 </template>

@@ -73,6 +73,9 @@
     text: string;
   } | null>(null);
 
+  /** 编辑器是否拥有焦点 */
+  const isEditorFocused = ref(false);
+
   /** 格式状态 */
   const formatState = ref({ ...EMPTY_FORMAT_STATE });
 
@@ -96,6 +99,14 @@
       editor.value.setHTML(props.modelValue);
     }
 
+    // 监听编辑器焦点，控制持久化选区行为
+    useEventListener(editorContainer.value, 'focus', () => {
+      isEditorFocused.value = true;
+      /* 聚焦时同步选区状态（selectionchange 可能先于 focus 触发） */
+      syncSelectionFromDOM();
+    });
+    useEventListener(editorContainer.value, 'blur', () => { isEditorFocused.value = false; });
+
     // 监听选区变化
     useEventListener(document, 'selectionchange', handleSelectionChange);
 
@@ -105,17 +116,33 @@
   });
 
   /**
-   * 处理选区变化 - 只更新持久化选区
+   * 从 DOM 中同步选区状态到持久化选区
+   *
+   * 持久化选区规则：
+   * - 编辑器内选区折叠（光标点击）→ 清除持久化选区
+   * - 编辑器内非折叠选区 → 更新持久化选区
+   * - 选区不在编辑器内 → 不处理
    */
-  function handleSelectionChange() {
+  function syncSelectionFromDOM() {
     if (!editorContainer.value) return;
 
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.getRangeAt(0).collapsed) return;
+    if (!selection || selection.rangeCount === 0) return;
 
     const range = selection.getRangeAt(0);
     if (!editorContainer.value.contains(range.commonAncestorContainer)) return;
 
+    /* 编辑器内选区折叠（光标点击）→ 清除持久化选区 */
+    if (range.collapsed) {
+      persistentSelection.value = null;
+      currentSelection.value = { start: 0, end: 0, text: '' };
+      CSS.highlights?.delete('editor-selection');
+      formatState.value = { ...EMPTY_FORMAT_STATE };
+      emit('selectionChange', 0, 0, '');
+      return;
+    }
+
+    /* 编辑器内非折叠选区 → 更新持久化选区 */
     const pos = getSelectionPosition(editorContainer.value);
     if (!pos) return;
 
@@ -130,6 +157,17 @@
 
     updateFormatState();
     emit('selectionChange', pos.start, pos.end, text);
+  }
+
+  /**
+   * 处理选区变化
+   *
+   * 仅在编辑器拥有焦点时处理选区变化，
+   * 编辑器失焦时忽略所有选区变化以保持持久化选区。
+   */
+  function handleSelectionChange() {
+    if (!isEditorFocused.value) return;
+    syncSelectionFromDOM();
   }
 
   /**
@@ -315,7 +353,9 @@
     getHTML,
     /** 设置 HTML */
     setHTML,
-    /** 当前选区 */
+    /** 持久化选区（编辑器外部操作不影响，编辑器内光标折叠时清除） */
+    persistentSelection,
+    /** 当前选区（跟随浏览器 selection 实时变化） */
     currentSelection,
     /** 格式状态 */
     formatState,
@@ -323,7 +363,7 @@
 </script>
 
 <template>
-  <div class="border border-gray-300 rounded-lg overflow-hidden font-sans bg-white shadow-sm">
+  <div class="flex-1 min-w-0 border border-gray-300 rounded-lg overflow-hidden font-sans bg-white shadow-sm">
     <!-- 工具栏 -->
     <div class="flex items-center p-2 bg-gray-50 border-b border-gray-200 gap-1">
       <template v-for="btn in toolbarButtons" :key="btn.style">
