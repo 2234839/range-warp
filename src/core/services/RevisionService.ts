@@ -20,12 +20,18 @@ registerContainerConfig('revision-insert', {
   attributeSelector: '.revision-insert',
   display: 'inline',
   crossBlock: 'split',
+  idAttribute: 'data-revision-id',
+  splitRepair: 'none',
+  copyable: false,
 });
 registerContainerConfig('revision-delete', {
   tagName: 'span',
   attributeSelector: '.revision-delete',
   display: 'inline',
   crossBlock: 'split',
+  idAttribute: 'data-revision-id',
+  splitRepair: 'none',
+  copyable: false,
 });
 
 export interface CreateRevisionOptions {
@@ -274,8 +280,8 @@ export class RevisionService {
   private _resolveInRange(start: number, end: number, isAccept: boolean): number {
     const revisions = this.queryInRange(start, end);
     /* 从后向前处理，避免前面的文本删除导致后面的修订位置偏移 */
-    for (let i = revisions.length - 1; i >= 0; i--) {
-      this._partialResolve(revisions[i], start, end, isAccept);
+    for (const revision of [...revisions].reverse()) {
+      this._partialResolve(revision, start, end, isAccept);
     }
     this.refresh();
     return revisions.length;

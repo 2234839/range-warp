@@ -20,6 +20,9 @@ registerContainerConfig('bookmark', {
   attributeSelector: '.bookmark',
   display: 'inline',
   crossBlock: 'split',
+  idAttribute: 'data-bookmark-id',
+  splitRepair: 'fill-gaps',
+  copyable: false,
 });
 
 export interface CreateBookmarkOptions {

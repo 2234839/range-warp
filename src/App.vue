@@ -7,6 +7,7 @@
   import 'prismjs/themes/prism-tomorrow.css';
   import 'prismjs/components/prism-markup';
   import { html as formatHTML } from 'js-beautify';
+  import { getUnicodeStringLength } from './core/utils';
 
   /** EditorCore 组件引用 */
   const editorRef = ref<InstanceType<typeof EditorCore> | null>(null);
@@ -219,9 +220,6 @@
     const { start } = selectedRange.value;
     let currentPosition = start;
 
-    /** Unicode 字符长度 */
-    const strLen = (s: string) => { let n = 0; for (const _ of s) n++; return n; };
-
     // 构建操作列表并计算位置
     const operations: Array<{ type: number; text: string; position: number }> = [];
     for (const [type, text] of diffResult) {
@@ -231,13 +229,12 @@
         position: currentPosition,
       });
       if (type === diff.EQUAL || type === diff.DELETE) {
-        currentPosition += strLen(text);
+        currentPosition += getUnicodeStringLength(text);
       }
     }
 
     // 从后往前执行，避免位置偏移
-    for (let i = operations.length - 1; i >= 0; i--) {
-      const operation = operations[i];
+    for (const operation of [...operations].reverse()) {
       const { type, text, position } = operation;
 
       if (type === diff.EQUAL) {
@@ -245,14 +242,14 @@
         continue;
       }
 
-      const endPos = position + strLen(text);
+      const endPos = position + getUnicodeStringLength(text);
 
       if (type === diff.INSERT) {
         // 插入操作：使用 Range 的 insertText
         const range = editor.value!.createRange(position, position);
         range.insertText(text);
         // 创建插入修订
-        const newRange = editor.value!.createRange(position, position + strLen(text));
+        const newRange = editor.value!.createRange(position, position + getUnicodeStringLength(text));
         editor.value!.revisions.createInsert({
           range: newRange,
           author: 'current-user',
@@ -571,23 +568,3 @@
     </footer>
   </div>
 </template>
-
-<style scoped>
-/* 滚动条样式 */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f3f4f6;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 9999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
-}
-</style>

@@ -9,8 +9,8 @@
  */
 
 // 适配器层
-export { DOMRangeAdapter } from './adapters/DOMRangeAdapter';
-export type { DOMRangeAdapterOptions } from './adapters/DOMRangeAdapter';
+export { DOMRangeAdapter, getStyleTagNames, BLOCK_TAG_NAMES, getNonCopyableSelector } from './adapters/DOMRangeAdapter';
+export type { DOMRangeAdapterOptions, ContainerTagConfig } from './adapters/DOMRangeAdapter';
 export type { IRangeAdapter } from './adapters/IRangeAdapter';
 
 // 模型层

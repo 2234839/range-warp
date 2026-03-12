@@ -1,9 +1,34 @@
 <script setup lang="ts">
   import { ref, onMounted, useTemplateRef } from 'vue';
   import { useEventListener } from '@vueuse/core';
-  import { Editor, DOMRangeAdapter } from '../core/index';
+  import { Editor, DOMRangeAdapter, BLOCK_TAG_NAMES, getNonCopyableSelector } from '../core/index';
   import type { Editor as EditorType } from '../core/index';
   import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition } from './editor-utils';
+
+  /** 工具栏按钮配置 */
+  interface ToolbarButtonConfig {
+    /** 样式名称 */
+    style: string;
+    /** 按钮标题 */
+    title: string;
+    /** 按钮显示的图标标签，如 'B'、'I' */
+    label: string;
+    /** 图标额外 CSS 类（如 font-bold、italic） */
+    iconClass: string;
+    /** 是否使用包裹标签（如 strong、em、u、s） */
+    wrapTag?: string;
+    /** 分隔线（在此按钮前插入分隔线） */
+    divider?: boolean;
+  }
+
+  /** 工具栏按钮列表 */
+  const toolbarButtons: ToolbarButtonConfig[] = [
+    { style: 'bold', title: '加粗', label: 'B', iconClass: 'font-bold', wrapTag: 'strong' },
+    { style: 'italic', title: '斜体', label: 'I', iconClass: 'italic', wrapTag: 'em' },
+    { style: 'underline', title: '下划线', label: 'U', iconClass: 'underline', wrapTag: 'u' },
+    { style: 'strikethrough', title: '删除线', label: 'S', iconClass: 'line-through', wrapTag: 's' },
+    { style: 'highlight', title: '高亮', label: 'H', iconClass: '', divider: true },
+  ];
 
   /** 组件属性 */
   interface Props {
@@ -73,6 +98,10 @@
 
     // 监听选区变化
     useEventListener(document, 'selectionchange', handleSelectionChange);
+
+    // 监听复制/剪切事件，清洗剪贴板中的不可复制容器
+    useEventListener(editorContainer.value, 'copy', handleCopyCut);
+    useEventListener(editorContainer.value, 'cut', handleCopyCut);
   });
 
   /**
@@ -108,6 +137,92 @@
    */
   function handleInput() {
     emit('update:modelValue', getHTML());
+    /** 修复跨块容器的非连续分片（如书签断裂） */
+    editor.value?.repairSplitContainers();
+  }
+
+  /** 不可复制容器的 CSS 选择器 */
+  const NON_COPYABLE_SELECTOR = getNonCopyableSelector();
+
+  /**
+   * 拦截复制/剪切事件，清洗剪贴板 HTML
+   *
+   * 1. 从选区提取 HTML 片段
+   * 2. 清洗不可复制容器（书签、修订等），保留文本和内联样式
+   * 3. 补回 range.cloneContents() 丢失的祖先格式化元素（如 em、strong）
+   * 4. 写入剪贴板
+   */
+  function handleCopyCut(event: ClipboardEvent) {
+    if (!editor.value) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    if (!editorContainer.value?.contains(range.commonAncestorContainer)) return;
+
+    event.preventDefault();
+
+    const fragment = range.cloneContents();
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(fragment);
+
+    /** 清洗不可复制容器 */
+    const sanitizedHTML = editor.value.sanitizeHTML(wrapper.innerHTML);
+
+    /** 补回 cloneContents 丢失的格式化祖先上下文 */
+    const ancestors = getFormattingAncestors(range, editorContainer.value);
+    const html = wrapWithFormatting(sanitizedHTML, ancestors);
+
+    event.clipboardData?.setData('text/html', html);
+    event.clipboardData?.setData('text/plain', selection.toString());
+
+    /** 剪切时删除选区内容 */
+    if (event.type === 'cut') {
+      range.deleteContents();
+      emit('update:modelValue', getHTML());
+      editor.value.repairSplitContainers();
+    }
+  }
+
+  /**
+   * 获取选区的格式化祖先元素（从内到外）
+   *
+   * 使用黑名单策略：保留所有内联祖先，只排除块级元素和不可复制的语义容器。
+   * 这样任意富文本格式化元素（如自定义 span、font 等）都能被保留。
+   */
+  function getFormattingAncestors(range: Range, container: Element): Element[] {
+    const common = range.commonAncestorContainer;
+    let node: Node | null = common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement;
+    const ancestors: Element[] = [];
+
+    while (node && node !== container) {
+      if (node instanceof Element) {
+        /* 块级元素终止祖先链（格式化上下文在块边界处断裂） */
+        if (BLOCK_TAG_NAMES.has(node.tagName.toLowerCase())) break;
+        /* 跳过不可复制的语义容器（书签、修订等），但继续向上查找 */
+        if (NON_COPYABLE_SELECTOR && node.matches(NON_COPYABLE_SELECTOR)) {
+          node = node.parentElement;
+          continue;
+        }
+        ancestors.push(node);
+      }
+      node = node.parentElement;
+    }
+
+    return ancestors;
+  }
+
+  /**
+   * 用格式化祖先包裹 HTML 字符串（从外到内逐层包裹）
+   */
+  function wrapWithFormatting(html: string, ancestors: Element[]): string {
+    let result = html;
+    for (const ancestor of [...ancestors].reverse()) {
+      const tag = ancestor.tagName.toLowerCase();
+      result = `<${tag}>${result}</${tag}>`;
+    }
+    return result;
   }
 
   /**
@@ -126,30 +241,19 @@
   }
 
   /**
-   * 应用样式
+   * 应用或移除样式
    */
-  function applyStyle(style: string) {
+  function setStyle(style: string, apply: boolean) {
     if (!editor.value) return;
 
     const { start, end } = currentSelection.value;
     if (start === end) return;
 
-    editor.value.applyStyle(start, end, style);
-
-    emit('update:modelValue', getHTML());
-    setTimeout(updateFormatState, 0);
-  }
-
-  /**
-   * 移除样式
-   */
-  function removeStyle(style: string) {
-    if (!editor.value) return;
-
-    const { start, end } = currentSelection.value;
-    if (start === end) return;
-
-    editor.value.removeStyle(start, end, style);
+    if (apply) {
+      editor.value.applyStyle(start, end, style);
+    } else {
+      editor.value.removeStyle(start, end, style);
+    }
 
     emit('update:modelValue', getHTML());
     setTimeout(updateFormatState, 0);
@@ -162,11 +266,7 @@
     const styleKey = STYLE_KEYS[style];
     if (!styleKey) return;
 
-    if (formatState.value[styleKey]) {
-      removeStyle(style);
-    } else {
-      applyStyle(style);
-    }
+    setStyle(style, !formatState.value[styleKey]);
 
     /* 样式操作后，恢复编辑器焦点并尝试恢复选区 */
     if (editorContainer.value) {
@@ -207,10 +307,10 @@
   defineExpose({
     /** Editor 实例 */
     editor,
-    /** 应用样式 */
-    applyStyle,
-    /** 移除样式 */
-    removeStyle,
+    /** 应用或移除样式 */
+    setStyle,
+    /** 切换样式 */
+    toggleStyle,
     /** 获取 HTML */
     getHTML,
     /** 设置 HTML */
@@ -226,70 +326,22 @@
   <div class="border border-gray-300 rounded-lg overflow-hidden font-sans bg-white shadow-sm">
     <!-- 工具栏 -->
     <div class="flex items-center p-2 bg-gray-50 border-b border-gray-200 gap-1">
-      <!-- 格式化按钮组 -->
-      <button
-        @click="toggleStyle('bold')"
-        :class="[
-          'p-2 border rounded text-sm font-bold min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.bold
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="加粗">
-        <strong>B</strong>
-      </button>
-
-      <button
-        @click="toggleStyle('italic')"
-        :class="[
-          'p-2 border rounded text-sm italic min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.italic
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="斜体">
-        <em>I</em>
-      </button>
-
-      <button
-        @click="toggleStyle('underline')"
-        :class="[
-          'p-2 border rounded text-sm underline min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.underline
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="下划线">
-        <u>U</u>
-      </button>
-
-      <button
-        @click="toggleStyle('strikethrough')"
-        :class="[
-          'p-2 border rounded text-sm line-through min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.strikethrough
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="删除线">
-        <s>S</s>
-      </button>
-
-      <!-- 分隔线 -->
-      <div class="w-px h-6 bg-gray-300 mx-1"></div>
-
-      <!-- 高亮按钮 -->
-      <button
-        @click="toggleStyle('highlight')"
-        :class="[
-          'p-2 border rounded text-sm min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.highlight
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="高亮">
-        <span class="px-1 bg-yellow-200 rounded text-xs font-bold">H</span>
-      </button>
+      <template v-for="btn in toolbarButtons" :key="btn.style">
+        <div v-if="btn.divider" class="w-px h-6 bg-gray-300 mx-1"></div>
+        <button
+          @click="toggleStyle(btn.style)"
+          :class="[
+            'p-2 border rounded text-sm min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
+            btn.iconClass,
+            formatState[STYLE_KEYS[btn.style]]
+              ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
+          ]"
+          :title="btn.title">
+          <component :is="btn.wrapTag" v-if="btn.wrapTag">{{ btn.label }}</component>
+          <span v-else class="px-1 bg-yellow-200 rounded text-xs font-bold">{{ btn.label }}</span>
+        </button>
+      </template>
     </div>
 
     <!-- 编辑区域 -->

@@ -38,7 +38,14 @@ export function getUtf16Offset(str: string, unicodeIndex: number): number {
  * 按 Unicode 下标切片字符串
  */
 export function getUtf16Slice(str: string, start: number, end: number): string {
-  return Array.from(str).slice(start, end).join('');
+  let result = '';
+  let index = 0;
+  for (const char of str) {
+    if (index >= end) break;
+    if (index >= start) result += char;
+    index++;
+  }
+  return result;
 }
 
 /**

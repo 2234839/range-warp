@@ -247,12 +247,13 @@ export class Editor {
     strikethrough: boolean;
     highlight: boolean;
   } {
+    const styleMap = this._adapter.getStylesInRange(start, end);
     return {
-      bold: this._adapter.hasStyle(start, end, 'strong') || this._adapter.hasStyle(start, end, 'b'),
-      italic: this._adapter.hasStyle(start, end, 'em') || this._adapter.hasStyle(start, end, 'i'),
-      underline: this._adapter.hasStyle(start, end, 'u'),
-      strikethrough: this._adapter.hasStyle(start, end, 's') || this._adapter.hasStyle(start, end, 'strike'),
-      highlight: this._adapter.hasStyle(start, end, 'mark'),
+      bold: styleMap.has('bold'),
+      italic: styleMap.has('italic'),
+      underline: styleMap.has('underline'),
+      strikethrough: styleMap.has('strikethrough'),
+      highlight: styleMap.has('highlight'),
     };
   }
 
@@ -262,6 +263,24 @@ export class Editor {
   refresh(): void {
     this.bookmarks.refresh();
     this.revisions.refresh();
+  }
+
+  /**
+   * 修复跨块容器的非连续分片
+   */
+  repairSplitContainers(): void {
+    this._adapter.repairSplitContainers();
+    this.bookmarks.refresh();
+  }
+
+  /**
+   * 清洗 HTML：移除不可复制容器的包裹标签，保留文本和内部子容器
+   *
+   * @param html 待清洗的 HTML 字符串
+   * @returns 清洗后的 HTML 字符串
+   */
+  sanitizeHTML(html: string): string {
+    return this._adapter.sanitizeHTML(html);
   }
 
   /**

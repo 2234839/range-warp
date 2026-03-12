@@ -6,7 +6,7 @@
  * 核心职责：基于原生 DOM Range API 实现 IRangeAdapter 接口
  * 设计原则：
  * - 直接使用浏览器 DOM Range API，不依赖任何富文本编辑器
- * - 支持 Unicode 字符下标计算 (使用 Array.from 处理 emoji 等多码点字符)
+ * - 支持 Unicode 字符下标计算 (使用 for...of 处理 emoji 等多码点字符)
  * - 提供准确的文本位置定位能力
  */
 
@@ -33,6 +33,24 @@ export interface ContainerTagConfig {
    * 'split': 按块拆分，每个块内单独包裹（保持块布局）
    */
   crossBlock?: 'wrap' | 'split';
+  /**
+   * 共享 ID 的属性名（用于分片关联和断裂修复）
+   * 例如 'data-bookmark-id' 或 'data-revision-id'
+   */
+  idAttribute?: string;
+  /**
+   * 非连续分片的修复策略（仅 crossBlock: 'split' 且 idAttribute 存在时生效）
+   * 'none': 不修复（默认）
+   * 'fill-gaps': 填充间隙，将间隙内容包裹为同类型元素
+   * 'keep-largest': 只保留文本最多的分片，移除其余
+   */
+  splitRepair?: 'none' | 'fill-gaps' | 'keep-largest';
+  /**
+   * 复制/剪切时是否保留该容器的包裹标签
+   * false: 剪贴板 HTML 中移除该容器元素，但保留其文本内容和内部子容器
+   * true (默认): 正常复制
+   */
+  copyable?: boolean;
 }
 
 /** 容器到标签的映射配置（支持动态注册） */
@@ -44,11 +62,21 @@ const CONTAINER_CONFIGS: Record<string, ContainerTagConfig> = {
   highlight: { tagName: 'mark', display: 'inline' },
 };
 
+/** 缓存的选择器字符串 */
+let _cachedStyleSelector = '';
+let _cachedTagToConfigName: Map<string, string> | null = null;
+
+function _invalidateConfigCache(): void {
+  _cachedStyleSelector = '';
+  _cachedTagToConfigName = null;
+}
+
 /**
  * 注册容器配置
  */
 export function registerContainerConfig(name: string, config: ContainerTagConfig): void {
   CONTAINER_CONFIGS[name] = config;
+  _invalidateConfigCache();
 }
 
 /**
@@ -101,18 +129,21 @@ function getConfigNameForElement(element: Element): string | undefined {
  * 检查两个元素是否属于相同的容器配置（同类型容器）
  *
  * 对于样式标签（bold、italic 等），相同配置名即为同类型，normalize 时合并冗余嵌套。
- * 对于修订和书签，它们各自有唯一 ID（data-revision-id / data-bookmark-id），
- * 不同 ID 代表不同语义实体，不应被合并。
+ * 对于带 idAttribute 的容器（修订、书签等），按 ID 区分不同语义实体。
  */
 function isSameContainerType(elem1: Element, elem2: Element): boolean {
   const name1 = getConfigNameForElement(elem1);
   const name2 = getConfigNameForElement(elem2);
   if (name1 === undefined || name1 !== name2) return false;
 
-  /* 修订和书签按 ID 区分，不同 ID 的不算同类型 */
-  const id1 = elem1.getAttribute('data-revision-id') ?? elem1.getAttribute('data-bookmark-id');
-  const id2 = elem2.getAttribute('data-revision-id') ?? elem2.getAttribute('data-bookmark-id');
-  if (id1 && id2) return id1 === id2;
+  /* 带 idAttribute 的容器按 ID 区分，不同 ID 的不算同类型 */
+  const config = CONTAINER_CONFIGS[name1];
+  const idAttr = config?.idAttribute;
+  if (idAttr) {
+    const id1 = elem1.getAttribute(idAttr);
+    const id2 = elem2.getAttribute(idAttr);
+    if (id1 && id2) return id1 === id2;
+  }
 
   return true;
 }
@@ -129,11 +160,56 @@ function buildContainerSelector(): string {
   return Object.values(CONTAINER_CONFIGS).map(configToSelector).join(',');
 }
 
+/** 构建纯样式标签选择器（不含 attributeSelector 的配置，如 bold、italic） */
+function buildStyleSelector(): string {
+  if (!_cachedStyleSelector) {
+    _cachedStyleSelector = Object.values(CONTAINER_CONFIGS)
+      .filter(config => !config.attributeSelector)
+      .map(configToSelector)
+      .join(',');
+  }
+  return _cachedStyleSelector;
+}
+
+/** 构建标签名到配置名的映射（如 'strong' → 'bold'） */
+function buildTagToConfigName(): Map<string, string> {
+  if (!_cachedTagToConfigName) {
+    _cachedTagToConfigName = new Map();
+    for (const [name, config] of Object.entries(CONTAINER_CONFIGS)) {
+      if (!config.attributeSelector) {
+        _cachedTagToConfigName.set(config.tagName.toLowerCase(), name);
+      }
+    }
+  }
+  return _cachedTagToConfigName;
+}
+
 /** extract + insert 包裹：从 range 中提取内容放入 wrapper，再插回原位 */
 function wrapRangeContents(range: globalThis.Range, wrapper: Element): void {
   const extracted = range.extractContents();
   wrapper.appendChild(extracted);
   range.insertNode(wrapper);
+}
+
+/** 获取所有样式标签名集合（不含 attributeSelector 的配置） */
+export function getStyleTagNames(): Set<string> {
+  return new Set(buildTagToConfigName().keys());
+}
+
+/** 块级元素标签名集合 */
+export const BLOCK_TAG_NAMES = new Set([
+  'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'li', 'blockquote', 'pre', 'td', 'th', 'ul', 'ol',
+  'table', 'tr', 'thead', 'tbody', 'section', 'article',
+  'header', 'footer', 'nav', 'main', 'aside', 'figure', 'figcaption',
+]);
+
+/** 获取不可复制容器的 CSS 选择器 */
+export function getNonCopyableSelector(): string {
+  return Object.values(CONTAINER_CONFIGS)
+    .filter(config => config.copyable === false)
+    .map(configToSelector)
+    .join(',');
 }
 
 /** 块级元素选择器（缓存为模块级常量，避免重复构建） */
@@ -200,23 +276,23 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     let node;
     while ((node = walker.nextNode())) {
-      const textNode = node as Text;
-      const text = textNode.textContent || '';
+      if (!(node instanceof Text)) continue;
+      const text = node.textContent || '';
       const textLength = getUnicodeStringLength(text);
       const nodeEnd = currentPos + textLength;
 
       if (!startNode && start < nodeEnd) {
-        startNode = textNode;
+        startNode = node;
         startOffset = getUtf16Offset(text, start - currentPos);
       }
 
       if (!endNode && end <= nodeEnd) {
-        endNode = textNode;
+        endNode = node;
         endOffset = getUtf16Offset(text, end - currentPos);
       }
 
       currentPos = nodeEnd;
-      lastNode = textNode;
+      lastNode = node;
 
       if (startNode && endNode) break;
     }
@@ -377,8 +453,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
         let currentParent: Node | null = node.parentNode;
 
         while (currentParent && currentParent !== this._container) {
-          if (currentParent.nodeType === Node.ELEMENT_NODE && isSupportedStyleElement(currentParent as Element)) {
-            outermostStyleParent = currentParent as Element;
+          if (currentParent instanceof Element && isSupportedStyleElement(currentParent)) {
+            outermostStyleParent = currentParent;
           }
           currentParent = currentParent.parentNode;
         }
@@ -661,7 +737,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
       {
         acceptNode: (node) => {
           if (node === element) return NodeFilter.FILTER_SKIP;
-          return isSupportedStyleElement(node as Element) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+          return node instanceof Element && isSupportedStyleElement(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
         }
       }
     );
@@ -770,8 +846,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
         let currentParent: Node | null = node.parentNode;
         let hasStyledParent = false;
         while (currentParent && currentParent !== element) {
-          if (currentParent.nodeType === Node.ELEMENT_NODE) {
-            if (isSupportedStyleElement(currentParent as Element)) {
+          if (currentParent instanceof Element) {
+            if (isSupportedStyleElement(currentParent)) {
               hasStyledParent = true;
               break;
             }
@@ -823,11 +899,12 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     let node;
     while ((node = walker.nextNode())) {
+      if (!(node instanceof Text)) continue;
       const text = node.textContent || '';
       const textLength = getUnicodeStringLength(text);
       if (textLength > 0) {
         result.push({
-          node: node as Text,
+          node,
           nodeStart: currentPos,
           nodeEnd: currentPos + textLength
         });
@@ -907,8 +984,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
       /* 向后合并所有相邻的同类型标签 */
       let candidate: Node | null = mergeTarget.nextSibling;
       while (candidate) {
-        if (candidate.nodeType !== Node.ELEMENT_NODE) break;
-        const nextElem = candidate as Element;
+        if (!(candidate instanceof Element)) break;
+        const nextElem = candidate;
         if (!isSameContainerType(mergeTarget, nextElem)) break;
 
         while (nextElem.firstChild) {
@@ -922,8 +999,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
       /* 向前合并所有相邻的同类型标签 */
       candidate = mergeTarget.previousSibling;
       while (candidate) {
-        if (candidate.nodeType !== Node.ELEMENT_NODE) break;
-        const prevElem = candidate as Element;
+        if (!(candidate instanceof Element)) break;
+        const prevElem = candidate;
         if (!isSameContainerType(mergeTarget, prevElem)) break;
 
         while (mergeTarget.firstChild) {
@@ -970,40 +1047,53 @@ export class DOMRangeAdapter implements IRangeAdapter {
   findText(searchText: string): Array<{ start: number; end: number }> {
     if (!searchText) return [];
 
+    const searchUtf16Len = searchText.length;
     const searchUnicodeLen = getUnicodeStringLength(searchText);
     const matches: Array<{ start: number; end: number }> = [];
     const snapshot = this.getTextNodesWithPositions(this._container);
 
     for (const { node, nodeStart } of snapshot) {
       const text = node.textContent || '';
-      const unicodeLen = getUnicodeStringLength(text);
-      let searchIndex = 0;
+      let utf16Pos = 0;
+      let unicodePos = 0;
 
-      while (searchIndex <= unicodeLen - searchUnicodeLen) {
-        const candidate = getUtf16Slice(text, searchIndex, searchIndex + searchUnicodeLen);
-        if (candidate === searchText) {
-          matches.push({ start: nodeStart + searchIndex, end: nodeStart + searchIndex + searchUnicodeLen });
-          searchIndex += searchUnicodeLen;
-        } else {
-          searchIndex++;
+      while (utf16Pos <= text.length - searchUtf16Len) {
+        const found = text.indexOf(searchText, utf16Pos);
+        if (found === -1) break;
+
+        /* 将 utf16Pos 到 found 之间的 UTF-16 偏移转为 Unicode 字符数 */
+        for (let i = utf16Pos; i < found; ) {
+          const cp = text.codePointAt(i)!;
+          i += cp > 0xFFFF ? 2 : 1;
+          unicodePos++;
         }
+
+        matches.push({ start: nodeStart + unicodePos, end: nodeStart + unicodePos + searchUnicodeLen });
+        utf16Pos = found + searchUtf16Len;
+        unicodePos += searchUnicodeLen;
       }
     }
 
     return matches;
   }
 
-  hasStyle(start: number, end: number, tagName: string): boolean {
-    const allElements = this._container.querySelectorAll(tagName);
+  getStylesInRange(start: number, end: number): Set<string> {
+    const result = new Set<string>();
+    const selector = buildStyleSelector();
+    const tagToConfig = buildTagToConfigName();
 
-    for (const element of allElements) {
+    const elements = this._container.querySelectorAll(selector);
+    for (const element of elements) {
       const pos = this.getElementPosition(element);
       if (pos && pos.start < end && pos.end > start) {
-        return true;
+        const configName = tagToConfig.get(element.tagName.toLowerCase());
+        if (configName) {
+          result.add(configName);
+        }
       }
     }
 
-    return false;
+    return result;
   }
 
   removeElementsBySelector(selector: string, keepChildren: boolean): void {
@@ -1051,12 +1141,12 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     const target = sorted[0];
 
-    for (let i = 1; i < sorted.length; i++) {
-      const children = Array.from(sorted[i].childNodes);
+    for (const el of sorted.slice(1)) {
+      const children = [...el.childNodes];
       for (const child of children) {
         target.appendChild(child);
       }
-      sorted[i].remove();
+      el.remove();
     }
 
     /* 合并后如果目标块为空，也移除 */
@@ -1065,5 +1155,212 @@ export class DOMRangeAdapter implements IRangeAdapter {
     }
 
     this._container.normalize();
+  }
+
+  /**
+   * 修复跨块容器的非连续分片
+   *
+   * 遍历所有注册了 splitRepair 且 idAttribute 的容器配置，
+   * 按 ID 分组后检测非连续性，根据策略执行 fill-gaps 或 keep-largest
+   */
+  repairSplitContainers(): void {
+    for (const config of Object.values(CONTAINER_CONFIGS)) {
+      if (!config.idAttribute || config.splitRepair === 'none' || !config.splitRepair) continue;
+
+      const selector = configToSelector(config);
+      const elements = this._container.querySelectorAll(selector);
+
+      /* 按 idAttribute 值分组 */
+      const groups = new Map<string, Element[]>();
+      for (const element of elements) {
+        const id = element.getAttribute(config.idAttribute);
+        if (!id) continue;
+
+        let group = groups.get(id);
+        if (!group) {
+          group = [];
+          groups.set(id, group);
+        }
+        group.push(element);
+      }
+
+      /* 只处理多元素组 */
+      for (const [id, groupElements] of groups) {
+        if (groupElements.length < 2) continue;
+
+        /* 按文档位置排序 */
+        groupElements.sort((a, b) => {
+          const pos = a.compareDocumentPosition(b);
+          if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+          if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+          return 0;
+        });
+
+        if (this._hasGaps(groupElements)) {
+          if (config.splitRepair === 'fill-gaps') {
+            this._fillGaps(groupElements, config, id);
+          } else if (config.splitRepair === 'keep-largest') {
+            this._keepLargest(groupElements);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * 检测同组元素之间是否存在文本间隙
+   */
+  private _hasGaps(elements: Element[]): boolean {
+    if (elements.length < 2) return false;
+
+    /* 计算所有元素的逻辑范围 */
+    let minPos = Infinity;
+    let maxPos = 0;
+    for (const element of elements) {
+      const pos = this.getElementPosition(element);
+      if (!pos) continue;
+      minPos = Math.min(minPos, pos.start);
+      maxPos = Math.max(maxPos, pos.end);
+    }
+
+    if (minPos === Infinity) return false;
+
+    /* 计算元素覆盖的总文本长度 */
+    let coveredLength = 0;
+    for (const element of elements) {
+      coveredLength += getUnicodeStringLength(element.textContent || '');
+    }
+
+    /* 范围内的总文本长度大于已覆盖的长度 → 存在间隙 */
+    const totalText = this._adapter_getText(minPos, maxPos);
+    return getUnicodeStringLength(totalText) > coveredLength;
+  }
+
+  /**
+   * 填充间隙：将逻辑范围内未包裹的文本节点包裹为同类型元素
+   */
+  private _fillGaps(elements: Element[], config: ContainerTagConfig, id: string): void {
+    /* 计算逻辑范围 */
+    let minPos = Infinity;
+    let maxPos = 0;
+    for (const element of elements) {
+      const pos = this.getElementPosition(element);
+      if (!pos) continue;
+      minPos = Math.min(minPos, pos.start);
+      maxPos = Math.max(maxPos, pos.end);
+    }
+
+    if (minPos === Infinity || minPos >= maxPos) return;
+
+    const snapshot = this.getTextNodesWithPositions(this._container);
+    const idAttr = config.idAttribute!;
+    const newElements: Element[] = [];
+
+    for (const { node, nodeStart, nodeEnd } of snapshot) {
+      if (nodeStart >= maxPos) break;
+      if (nodeEnd <= minPos) continue;
+
+      /* 检查是否已在同 ID 容器内 */
+      let parent: Element | null = node.parentElement;
+      let alreadyWrapped = false;
+      while (parent && parent !== this._container) {
+        if (parent.getAttribute(idAttr) === id) {
+          alreadyWrapped = true;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+      if (alreadyWrapped) continue;
+
+      /* 计算交集 */
+      const overlapStart = Math.max(nodeStart, minPos);
+      const overlapEnd = Math.min(nodeEnd, maxPos);
+
+      if (overlapStart < overlapEnd) {
+        const text = node.textContent || '';
+        const localRange = document.createRange();
+        localRange.setStart(node, getUtf16Offset(text, overlapStart - nodeStart));
+        localRange.setEnd(node, getUtf16Offset(text, overlapEnd - nodeStart));
+
+        const wrapper = document.createElement(config.tagName);
+        if (config.attributeSelector) {
+          const className = config.attributeSelector.replace(/^\./, '');
+          wrapper.className = className;
+        }
+        wrapper.setAttribute(idAttr, id);
+
+        wrapRangeContents(localRange, wrapper);
+        newElements.push(wrapper);
+      }
+    }
+
+    /* 对新创建的包裹元素执行 normalize */
+    if (newElements.length > 0) {
+      this.normalize(minPos, maxPos);
+    }
+  }
+
+  /**
+   * 只保留最大的分片，移除其余（保留文本内容）
+   *
+   * @param elements 同一 ID 的所有分片元素
+   */
+  private _keepLargest(elements: Element[]): void {
+    /* 按文本长度降序排序 */
+    const sorted = [...elements].sort((a, b) =>
+      getUnicodeStringLength(b.textContent || '') - getUnicodeStringLength(a.textContent || '')
+    );
+
+    /* 保留最大的，移除其余 */
+    for (const el of sorted.slice(1)) {
+      const parent = el.parentNode;
+      if (!parent) continue;
+
+      while (el.firstChild) {
+        parent.insertBefore(el.firstChild, el);
+      }
+      el.remove();
+    }
+
+    this._container.normalize();
+  }
+
+  /** 内部使用的 getText（避免通过公共接口时产生副作用） */
+  private _adapter_getText(start: number, end: number): string {
+    const range = this.createDOMRange(start, end);
+    return range ? range.toString() : '';
+  }
+
+  /**
+   * 清洗 HTML：移除不可复制容器的包裹标签，保留其文本内容和内部子容器
+   *
+   * 用于剪贴板清洗，避免书签/修订等语义容器被复制到外部后影响包裹范围
+   *
+   * @param html 待清洗的 HTML 字符串
+   * @returns 清洗后的 HTML 字符串
+   */
+  sanitizeHTML(html: string): string {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+
+    for (const config of Object.values(CONTAINER_CONFIGS)) {
+      if (config.copyable !== false) continue;
+
+      const selector = configToSelector(config);
+      const elements = temp.querySelectorAll(selector);
+
+      for (const el of elements) {
+        /* 解包：将子节点提升到父级，移除容器包裹标签 */
+        const parent = el.parentNode;
+        if (!parent) continue;
+        while (el.firstChild) {
+          parent.insertBefore(el.firstChild, el);
+        }
+        el.remove();
+      }
+    }
+
+    temp.normalize();
+    return temp.innerHTML;
   }
 }

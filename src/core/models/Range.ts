@@ -20,15 +20,6 @@ export interface RangeOptions {
 }
 
 export class Range {
-  /** 样式名称到标签名的映射 */
-  private static readonly STYLE_TAG_MAP: Record<string, string> = {
-    bold: 'strong',
-    italic: 'em',
-    underline: 'u',
-    strikethrough: 's',
-    highlight: 'mark',
-  };
-
   /** 起始字符下标 */
   readonly start: number;
   /** 结束字符下标 */
@@ -135,9 +126,7 @@ export class Range {
    * @returns 是否包含
    */
   hasStyle(style: string): boolean {
-    const tagName = Range.STYLE_TAG_MAP[style];
-    if (!tagName) return false;
-    return this._adapter.hasStyle(this.start, this.end, tagName);
+    return this._adapter.getStylesInRange(this.start, this.end).has(style);
   }
 
   /**

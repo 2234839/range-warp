@@ -119,15 +119,6 @@ export interface IRangeAdapter {
   findText(searchText: string): Array<{ start: number; end: number }>;
 
   /**
-   * 检查指定范围是否包含特定样式的元素
-   * @param start 起始字符下标
-   * @param end 结束字符下标
-   * @param tagName 标签名
-   * @returns 是否包含
-   */
-  hasStyle(start: number, end: number, tagName: string): boolean;
-
-  /**
    * 获取编辑器根元素
    * @returns HTMLElement
    */
@@ -162,4 +153,36 @@ export interface IRangeAdapter {
    * @param blockElements 需要合并的块级元素
    */
   mergeBlocks(blockElements: Element[]): void;
+
+  /**
+   * 修复跨块容器的非连续分片
+   *
+   * 根据 ContainerTagConfig.splitRepair 配置，
+   * 处理共享同一 ID 但被间隙分隔的多个元素：
+   * - 'fill-gaps': 包裹间隙内容
+   * - 'keep-largest': 只保留最大的分片
+   */
+  repairSplitContainers(): void;
+
+  /**
+   * 清洗 HTML：移除 copyable=false 容器的包裹标签，保留文本和内部子容器
+   *
+   * 用于剪贴板清洗，避免书签/修订等语义容器被复制到外部
+   *
+   * @param html 待清洗的 HTML 字符串
+   * @returns 清洗后的 HTML 字符串
+   */
+  sanitizeHTML(html: string): string;
+
+  /**
+   * 查询范围内存在的样式标签集合
+   *
+   * 单次 DOM 查询获取所有样式元素，避免多次 querySelectorAll
+   *
+   * @param start 范围起始（Unicode 字符位置）
+   * @param end 范围结束（Unicode 字符位置）
+   * @returns 存在的样式标签名集合（如 'strong', 'em'）
+   */
+  getStylesInRange(start: number, end: number): Set<string>;
+
 }

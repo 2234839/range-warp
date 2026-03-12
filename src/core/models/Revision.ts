@@ -182,7 +182,7 @@ export class Revision {
       }
     }
 
-    return Array.from(blockSet);
+    return [...blockSet];
   }
 
   /**

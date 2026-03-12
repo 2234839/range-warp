@@ -171,13 +171,6 @@
     <section class="demo-section">
       <h2>使用说明</h2>
       <div class="usage-info">
-        <h3>全局安装</h3>
-        <pre><code>import { createApp } from 'vue'
-import { installComponents } from './components'
-
-const app = createApp(App)
-app.use({ install: installComponents })</code></pre>
-
         <h3>按需导入</h3>
         <pre><code>import { BaseButton, BaseInput } from './components'
 

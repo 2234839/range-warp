@@ -50,20 +50,32 @@ export class Bookmark {
 
   /**
    * 获取书签的 Range 对象
+   *
+   * 支持跨块书签：同一 bookmark ID 可对应多个元素，
+   * 合并所有元素的范围为一个 Range
+   *
    * @returns Range 实例
    */
   getRange(): Range | null {
     const container = this._adapter.getContainer();
-    const element = container.querySelector(`[data-bookmark-id="${this.metadata.id}"]`);
+    const elements = container.querySelectorAll(`[data-bookmark-id="${this.metadata.id}"]`);
 
-    if (!element) return null;
+    if (elements.length === 0) return null;
 
-    const pos = getElementPosition(element, container);
-    if (!pos) return null;
+    let minStart = Infinity;
+    let maxEnd = 0;
+
+    for (const element of elements) {
+      const pos = getElementPosition(element, container);
+      if (pos) {
+        minStart = Math.min(minStart, pos.start);
+        maxEnd = Math.max(maxEnd, pos.end);
+      }
+    }
 
     return new Range({
-      start: pos.start,
-      end: pos.end,
+      start: minStart,
+      end: maxEnd,
       adapter: this._adapter,
     });
   }
@@ -155,17 +167,25 @@ export class Bookmark {
 
   /**
    * 查询所有书签
+   *
+   * 同一 bookmark ID 可能对应多个 DOM 元素（跨块书签），
+   * 每个 ID 只返回一个 Bookmark 实例
+   *
    * @param adapter 适配器实例
    * @returns 书签数组
    */
   static findAll(adapter: IRangeAdapter): Bookmark[] {
     const container = adapter.getContainer();
     const elements = container.querySelectorAll(`.${BOOKMARK_CLASS}`);
+    const seenIds = new Set<string>();
     const bookmarks: Bookmark[] = [];
 
     for (const element of elements) {
+      const id = element.getAttribute('data-bookmark-id');
+      if (!id || seenIds.has(id)) continue;
       const bookmark = Bookmark.fromElement(element, adapter);
       if (bookmark) {
+        seenIds.add(id);
         bookmarks.push(bookmark);
       }
     }

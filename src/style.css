@@ -14,17 +14,6 @@ body {
   min-height: 100vh;
 }
 
-/* 自定义CSS变量 */
-:root {
-  --color-primary: #007bff;
-  --color-primary-hover: #0056b3;
-}
-
-/* 自定义工具类 */
-.bg-gradient-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
 /* 滚动条样式 */
 ::-webkit-scrollbar {
   width: 8px;
@@ -41,20 +30,4 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
-}
-
-/* 自定义动画 */
-.slide-up {
-  animation: slideUp 0.3s ease-out;
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(10px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
 }
