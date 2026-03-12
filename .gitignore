@@ -28,3 +28,4 @@ dist-ssr
 *.sw?
 
 .claude/scheduled_tasks.lock
+src/**/CLAUDE.md

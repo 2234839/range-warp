@@ -159,13 +159,14 @@ export function getFormattingAncestors(
   const ancestors: Element[] = [];
 
   while (node && node !== container) {
-    if (node instanceof Element) {
-      if (BLOCK_TAG_NAMES.has(node.tagName.toLowerCase())) break;
-      if (nonCopyableSelector && node.matches(nonCopyableSelector)) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as Element;
+      if (BLOCK_TAG_NAMES.has(element.tagName.toLowerCase())) break;
+      if (nonCopyableSelector && element.matches(nonCopyableSelector)) {
         node = node.parentElement;
         continue;
       }
-      ancestors.push(node);
+      ancestors.push(element);
     }
     node = node.parentElement;
   }

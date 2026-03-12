@@ -66,7 +66,7 @@
     function getChildElementCount(element: Element): number {
       let count = 0;
       for (const child of element.childNodes) {
-        if (child instanceof Element) count++;
+        if (child.nodeType === Node.ELEMENT_NODE) count++;
       }
       return count;
     }
@@ -104,16 +104,17 @@
         return;
       }
 
-      if (!(node instanceof Element)) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const element = node as Element;
 
       const currentIndex = elementIndex;
       elementIndex++;
 
-      const tag = node.tagName.toLowerCase();
-      const attrs = Array.from(node.attributes).map(a => ({ name: a.name, value: a.value }));
+      const tag = element.tagName.toLowerCase();
+      const attrs = Array.from(element.attributes).map(a => ({ name: a.name, value: a.value }));
 
-      const isEmpty = node.childNodes.length === 0;
-      const childElementCount = getChildElementCount(node);
+      const isEmpty = element.childNodes.length === 0;
+      const childElementCount = getChildElementCount(element);
       /** 是否为纯文本元素（只有文本子节点，无元素子节点） */
       const isTextOnly = childElementCount === 0;
 
@@ -124,12 +125,12 @@
         /** 纯文本元素 → <tag>text</tag> 单行紧凑显示 */
         addNode({
           type: 'tag-open', depth, tag, attrs, selfClosing: false,
-          text: getTextContent(node), childElementCount: 0, path: [currentIndex],
+          text: getTextContent(element), childElementCount: 0, path: [currentIndex],
         });
       } else {
         /** 有子元素 → 支持折叠，文本节点作为独立条目渲染 */
         addNode({ type: 'tag-open', depth, tag, attrs, selfClosing: false, childElementCount, path: [currentIndex] });
-        for (const child of node.childNodes) {
+        for (const child of element.childNodes) {
           walkNode(child, depth + 1);
         }
         addNode({ type: 'tag-close', depth, tag, attrs: [], selfClosing: false, childElementCount: 0, path: [currentIndex] });
