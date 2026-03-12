@@ -10,64 +10,11 @@
  * - 提供准确的文本位置定位能力
  */
 
-import type { IRangeAdapter, WrapOptions } from './IRangeAdapter';
+import type { IRangeAdapter, WrapOptions, ContainerTagConfig } from './IRangeAdapter';
 import { getElementPosition, getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils';
 
-/**
- * 容器标签配置
- *
- * 参考 ProseMirror 的 MarkSpec 设计:
- * - 配置只描述容器是什么（tagName、attributeSelector）
- * - 包裹行为由调用方的 WrapOptions 决定，而非容器自身配置
- */
-export interface ContainerTagConfig {
-  /** 标签名 */
-  tagName: string;
-  /** 可选的属性选择器 (用于区分不同类型的同标签) */
-  attributeSelector?: string;
-  /** 显示类型: inline(行内), block(块级), inline-block(混合) */
-  display?: 'inline' | 'block' | 'inline-block';
-  /**
-   * 跨块级元素时的处理策略
-   * 'wrap' (默认): 把跨块内容全部包裹进一个容器（可能破坏块布局）
-   * 'split': 按块拆分，每个块内单独包裹（保持块布局）
-   */
-  crossBlock?: 'wrap' | 'split';
-  /**
-   * 共享 ID 的属性名（用于分片关联和断裂修复）
-   * 例如 'data-bookmark-id' 或 'data-revision-id'
-   */
-  idAttribute?: string;
-  /**
-   * 非连续分片的修复策略（仅 crossBlock: 'split' 且 idAttribute 存在时生效）
-   * 'none': 不修复（默认）
-   * 'fill-gaps': 填充间隙，将间隙内容包裹为同类型元素
-   * 'keep-largest': 只保留文本最多的分片，移除其余
-   */
-  splitRepair?: 'none' | 'fill-gaps' | 'keep-largest';
-  /**
-   * 复制/剪切时是否保留该容器的包裹标签
-   * false: 剪贴板 HTML 中移除该容器元素，但保留其文本内容和内部子容器
-   * true (默认): 正常复制
-   */
-  copyable?: boolean;
-  /**
-   * 相邻的相同配置名容器是否自动合并
-   * true: normalize 时将相邻的同配置名容器合并为一个（忽略 ID 差异）
-   * false (默认): 仅在配置名和 ID 都相同时才合并
-   *
-   * 适用场景：
-   * - 修订 (revision-insert/delete): 设为 true，嵌套创建修订时自动合并为单个修订
-   * - 书签 (bookmark): 保持 false，相邻书签语义上应独立存在
-   */
-  mergeAdjacent?: boolean;
-  /**
-   * normalize 时是否移除空标签
-   * true (默认): normalize 时自动移除该类型的空容器元素
-   * false: 保留空容器（适用于需要占位标记的场景，如空书签）
-   */
-  removeEmpty?: boolean;
-}
+/** @deprecated 使用 IRangeAdapter 中的 ContainerTagConfig 类型 */
+export type { ContainerTagConfig } from './IRangeAdapter';
 
 /** 容器到标签的映射配置（支持动态注册） */
 const CONTAINER_CONFIGS: Record<string, ContainerTagConfig> = {
@@ -365,8 +312,19 @@ export class DOMRangeAdapter implements IRangeAdapter {
   // ==================== IRangeAdapter 接口实现 ====================
 
   getText(start: number, end: number): string {
-    const range = this.createDOMRange(start, end);
-    return range ? range.toString() : '';
+    const snapshot = this._buildTextNodeData().snapshot;
+    const parts: string[] = [];
+
+    for (const { node, nodeStart, nodeEnd } of snapshot) {
+      if (nodeStart >= end) break;
+      if (nodeEnd <= start) continue;
+
+      const overlapStart = Math.max(nodeStart, start) - nodeStart;
+      const overlapEnd = Math.min(nodeEnd, end) - nodeStart;
+      parts.push(getUtf16Slice(node.textContent || '', overlapStart, overlapEnd));
+    }
+
+    return parts.join('');
   }
 
   insertText(position: number, text: string): void {
@@ -600,17 +558,16 @@ export class DOMRangeAdapter implements IRangeAdapter {
       }
 
       if (fullyContainedElements.length > 0 && coveredStart <= start && coveredEnd >= end) {
-        /* 提取最外层元素：被其他元素包含的不是最外层 */
-        const nested = new Set<Element>();
-        for (const elem of fullyContainedElements) {
-          for (const other of fullyContainedElements) {
-            if (elem !== other && other.contains(elem)) {
-              nested.add(elem);
-              break;
-            }
+        /* 提取最外层元素：如果元素的祖先也在集合中，则它不是最外层 */
+        const elementSet = new Set(fullyContainedElements);
+        const outermost = fullyContainedElements.filter(elem => {
+          let parent = elem.parentElement;
+          while (parent) {
+            if (elementSet.has(parent)) return false;
+            parent = parent.parentElement;
           }
-        }
-        const outermost = fullyContainedElements.filter(elem => !nested.has(elem));
+          return true;
+        });
         if (this.areConsecutiveSiblings(outermost)) {
           this.moveElementsToWrapper(outermost, newElement);
           this.normalize(start, end);
@@ -1395,5 +1352,17 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     temp.normalize();
     return temp.innerHTML;
+  }
+
+  querySelectorAll(selector: string): Element[] {
+    return [...this._container.querySelectorAll(selector)];
+  }
+
+  getElementPosition(element: Element): { start: number; end: number } | null {
+    return getElementPosition(element, this._container);
+  }
+
+  registerContainerConfig(name: string, config: ContainerTagConfig): void {
+    registerContainerConfig(name, config);
   }
 }

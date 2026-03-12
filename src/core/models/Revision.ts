@@ -19,7 +19,6 @@
  */
 
 import type { IRangeAdapter } from '../adapters/IRangeAdapter';
-import { getElementPosition } from '../utils';
 import { Range } from './Range';
 
 /** 修订类型 */
@@ -82,9 +81,8 @@ export class Revision {
    * @returns Range 实例
    */
   getRange(): Range | null {
-    const container = this._adapter.getContainer();
     const selector = this._getSelector();
-    const elements = container.querySelectorAll(selector);
+    const elements = this._adapter.querySelectorAll(selector);
 
     if (elements.length === 0) return null;
 
@@ -92,7 +90,7 @@ export class Revision {
     let maxEnd = 0;
 
     for (const element of elements) {
-      const pos = getElementPosition(element, container);
+      const pos = this._adapter.getElementPosition(element);
       if (pos) {
         minStart = Math.min(minStart, pos.start);
         maxEnd = Math.max(maxEnd, pos.end);
@@ -168,7 +166,7 @@ export class Revision {
    */
   private _getAffectedBlocks(selector: string): Element[] {
     const container = this._adapter.getContainer();
-    const elements = container.querySelectorAll(selector);
+    const elements = this._adapter.querySelectorAll(selector);
     const blockSet = new Set<Element>();
 
     for (const el of elements) {
@@ -255,8 +253,7 @@ export class Revision {
    * @returns 修订数组
    */
   static findAll(adapter: IRangeAdapter): Revision[] {
-    const container = adapter.getContainer();
-    const elements = container.querySelectorAll(
+    const elements = adapter.querySelectorAll(
       `.${REVISION_INSERT_CLASS}, .${REVISION_DELETE_CLASS}`
     );
     const seenIds = new Set<string>();
@@ -282,12 +279,11 @@ export class Revision {
    * @returns Revision 实例或 null
    */
   static findById(id: string, adapter: IRangeAdapter): Revision | null {
-    const container = adapter.getContainer();
-    const element = container.querySelector(`[data-revision-id="${id}"]`);
-
-    if (!element) return null;
-
-    return Revision.fromElement(element, adapter);
+    const elements = adapter.querySelectorAll(`[data-revision-id="${id}"]`);
+    if (elements[0]) {
+      return Revision.fromElement(elements[0], adapter);
+    }
+    return null;
   }
 
   /**
@@ -298,8 +294,7 @@ export class Revision {
    * @returns 修订数组
    */
   static findInRange(start: number, end: number, adapter: IRangeAdapter): Revision[] {
-    const container = adapter.getContainer();
-    const elements = container.querySelectorAll(
+    const elements = adapter.querySelectorAll(
       `.${REVISION_INSERT_CLASS}, .${REVISION_DELETE_CLASS}`
     );
 
@@ -310,7 +305,7 @@ export class Revision {
       const id = element.getAttribute('data-revision-id');
       if (!id) continue;
 
-      const pos = getElementPosition(element, container);
+      const pos = adapter.getElementPosition(element);
       if (!pos) continue;
 
       const existing = idRanges.get(id);

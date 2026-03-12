@@ -1,4 +1,53 @@
 /**
+ * 容器标签配置
+ *
+ * 参考 ProseMirror 的 MarkSpec 设计:
+ * - 配置只描述容器是什么（tagName、attributeSelector）
+ * - 包裹行为由调用方的 WrapOptions 决定，而非容器自身配置
+ */
+export interface ContainerTagConfig {
+  /** 标签名 */
+  tagName: string;
+  /** 可选的属性选择器 (用于区分不同类型的同标签) */
+  attributeSelector?: string;
+  /** 显示类型: inline(行内), block(块级), inline-block(混合) */
+  display?: 'inline' | 'block' | 'inline-block';
+  /**
+   * 跨块级元素时的处理策略
+   * 'wrap' (默认): 把跨块内容全部包裹进一个容器（可能破坏块布局）
+   * 'split': 按块拆分，每个块内单独包裹（保持块布局）
+   */
+  crossBlock?: 'wrap' | 'split';
+  /** 共享 ID 的属性名（用于分片关联和断裂修复） */
+  idAttribute?: string;
+  /**
+   * 非连续分片的修复策略（仅 crossBlock: 'split' 且 idAttribute 存在时生效）
+   * 'none': 不修复（默认）
+   * 'fill-gaps': 填充间隙，将间隙内容包裹为同类型元素
+   * 'keep-largest': 只保留文本最多的分片，移除其余
+   */
+  splitRepair?: 'none' | 'fill-gaps' | 'keep-largest';
+  /**
+   * 复制/剪切时是否保留该容器的包裹标签
+   * false: 剪贴板 HTML 中移除该容器元素，但保留其文本内容和内部子容器
+   * true (默认): 正常复制
+   */
+  copyable?: boolean;
+  /**
+   * 相邻的相同配置名容器是否自动合并
+   * true: normalize 时将相邻的同配置名容器合并为一个（忽略 ID 差异）
+   * false (默认): 仅在配置名和 ID 都相同时才合并
+   */
+  mergeAdjacent?: boolean;
+  /**
+   * normalize 时是否移除空标签
+   * true (默认): normalize 时自动移除该类型的空容器元素
+   * false: 保留空容器（适用于需要占位标记的场景，如空书签）
+   */
+  removeEmpty?: boolean;
+}
+
+/**
  * Range 适配器接口定义
  *
  * 核心职责：统一不同编辑器的文本操作 API
@@ -184,5 +233,35 @@ export interface IRangeAdapter {
    * @returns 样式配置名集合（如 'bold', 'italic'）
    */
   getStylesInRange(start: number, end: number): Set<string>;
+
+  /**
+   * 在编辑器容器内查询匹配选择器的元素
+   *
+   * 统一 DOM 查询入口，上层模型不再直接操作 container.querySelectorAll
+   *
+   * @param selector CSS 选择器
+   * @returns 匹配的元素列表
+   */
+  querySelectorAll(selector: string): Element[];
+
+  /**
+   * 计算元素在文档中的文本位置范围（基于 Unicode 字符下标）
+   *
+   * 统一元素定位入口，上层模型不再直接使用原生 DOM Range API
+   *
+   * @param element 目标元素
+   * @returns { start, end } 或 null（element 不在容器内时）
+   */
+  getElementPosition(element: Element): { start: number; end: number } | null;
+
+  /**
+   * 注册容器标签配置
+   *
+   * 统一配置注册入口，上层服务不再直接导入具体适配器的 registerContainerConfig
+   *
+   * @param name 配置名称（如 'revision-insert', 'bookmark'）
+   * @param config 容器标签配置
+   */
+  registerContainerConfig(name: string, config: ContainerTagConfig): void;
 
 }

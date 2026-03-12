@@ -9,7 +9,6 @@
  */
 
 import type { IRangeAdapter } from '../adapters/IRangeAdapter';
-import { getElementPosition } from '../utils';
 import { Range } from './Range';
 
 /** 书签元数据接口 */
@@ -57,8 +56,7 @@ export class Bookmark {
    * @returns Range 实例
    */
   getRange(): Range | null {
-    const container = this._adapter.getContainer();
-    const elements = container.querySelectorAll(`[data-bookmark-id="${this.metadata.id}"]`);
+    const elements = this._adapter.querySelectorAll(`[data-bookmark-id="${this.metadata.id}"]`);
 
     if (elements.length === 0) return null;
 
@@ -66,7 +64,7 @@ export class Bookmark {
     let maxEnd = 0;
 
     for (const element of elements) {
-      const pos = getElementPosition(element, container);
+      const pos = this._adapter.getElementPosition(element);
       if (pos) {
         minStart = Math.min(minStart, pos.start);
         maxEnd = Math.max(maxEnd, pos.end);
@@ -104,11 +102,9 @@ export class Bookmark {
    * 滚动到书签可见区域
    */
   private scrollToView(): void {
-    const container = this._adapter.getContainer();
-    const element = container.querySelector(`[data-bookmark-id="${this.metadata.id}"]`);
-
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const elements = this._adapter.querySelectorAll(`[data-bookmark-id="${this.metadata.id}"]`);
+    if (elements[0]) {
+      elements[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
 
@@ -175,8 +171,7 @@ export class Bookmark {
    * @returns 书签数组
    */
   static findAll(adapter: IRangeAdapter): Bookmark[] {
-    const container = adapter.getContainer();
-    const elements = container.querySelectorAll(`.${BOOKMARK_CLASS}`);
+    const elements = adapter.querySelectorAll(`.${BOOKMARK_CLASS}`);
     const seenIds = new Set<string>();
     const bookmarks: Bookmark[] = [];
 
@@ -200,12 +195,11 @@ export class Bookmark {
    * @returns Bookmark 实例或 null
    */
   static findById(id: string, adapter: IRangeAdapter): Bookmark | null {
-    const container = adapter.getContainer();
-    const element = container.querySelector(`[data-bookmark-id="${id}"]`);
-
-    if (!element) return null;
-
-    return Bookmark.fromElement(element, adapter);
+    const elements = adapter.querySelectorAll(`[data-bookmark-id="${id}"]`);
+    if (elements[0]) {
+      return Bookmark.fromElement(elements[0], adapter);
+    }
+    return null;
   }
 
   /**
@@ -215,9 +209,8 @@ export class Bookmark {
    * @returns 书签数组
    */
   static findByName(name: string, adapter: IRangeAdapter): Bookmark[] {
-    const container = adapter.getContainer();
     const escapedName = name.replace(/"/g, '\\"');
-    const elements = container.querySelectorAll(`[data-bookmark-name="${escapedName}"]`);
+    const elements = adapter.querySelectorAll(`[data-bookmark-name="${escapedName}"]`);
     const bookmarks: Bookmark[] = [];
 
     for (const element of elements) {

@@ -9,23 +9,26 @@
  */
 
 import type { IRangeAdapter } from '../adapters/IRangeAdapter';
-import { registerContainerConfig } from '../adapters/DOMRangeAdapter.js';
+import type { ContainerTagConfig } from '../adapters/IRangeAdapter';
 import { Range } from '../models/Range';
 import { Revision, RevisionType, type RevisionMetadata } from '../models/Revision';
 import { generateId } from '../utils';
 
 /** 注册修订容器配置（使适配器能识别修订元素） */
-const REVISION_CONFIG = {
+const REVISION_CONFIG: Omit<ContainerTagConfig, 'attributeSelector'> = {
   tagName: 'span',
-  display: 'inline' as const,
-  crossBlock: 'split' as const,
+  display: 'inline',
+  crossBlock: 'split',
   idAttribute: 'data-revision-id',
-  splitRepair: 'none' as const,
+  splitRepair: 'none',
   copyable: false,
   mergeAdjacent: true,
 };
-registerContainerConfig('revision-insert', { ...REVISION_CONFIG, attributeSelector: '.revision-insert' });
-registerContainerConfig('revision-delete', { ...REVISION_CONFIG, attributeSelector: '.revision-delete' });
+
+function registerRevisionConfigs(adapter: IRangeAdapter): void {
+  adapter.registerContainerConfig('revision-insert', { ...REVISION_CONFIG, attributeSelector: '.revision-insert' });
+  adapter.registerContainerConfig('revision-delete', { ...REVISION_CONFIG, attributeSelector: '.revision-delete' });
+}
 
 export interface CreateRevisionOptions {
   /** 修订类型 */
@@ -60,6 +63,7 @@ export class RevisionService {
 
   constructor(adapter: IRangeAdapter) {
     this._adapter = adapter;
+    registerRevisionConfigs(adapter);
     this.refresh();
   }
 
