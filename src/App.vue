@@ -177,8 +177,7 @@
     }
 
     // 从后往前执行，避免位置偏移
-    for (let i = operations.length - 1; i >= 0; i--) {
-      const { type, text, position } = operations[i];
+    for (const { type, text, position } of [...operations].reverse()) {
 
       if (type === diff.EQUAL) {
         // 相同部分，无需处理
@@ -266,22 +265,22 @@
             <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">DOM 树</h2>
           </div>
           <DomTreePanel :html="editorContent" @select="handleTreeSelect" />
-            <!-- 保存状态 -->
-            <div class="px-4 py-2 border-t border-gray-200 text-xs flex items-center justify-between">
-              <span v-if="saveStatusText" class="flex items-center gap-1 text-green-600">
-                <span class="inline-block w-2 h-2 bg-green-600 rounded-full"></span>
-                {{ saveStatusText }}
-              </span>
-              <span v-else class="text-gray-400">就绪</span>
-            </div>
+          <!-- 保存状态 -->
+          <div class="px-4 py-2 border-t border-gray-200 text-xs flex items-center justify-between">
+            <span v-if="saveStatusText" class="flex items-center gap-1 text-green-600">
+              <span class="inline-block w-2 h-2 bg-green-600 rounded-full"></span>
+              {{ saveStatusText }}
+            </span>
+            <span v-else class="text-gray-400">就绪</span>
           </div>
+        </div>
 
-          <!-- 中间：富文本编辑器 -->
-          <EditorCore ref="editorRef" :model-value="editorContent"
-            @update:model-value="(html) => { editorContent = html; triggerSave(); }" />
+        <!-- 中间：富文本编辑器 -->
+        <EditorCore ref="editorRef" :model-value="editorContent"
+          @update:model-value="(html) => { editorContent = html; triggerSave(); }" />
 
-          <!-- 右侧：信息面板 -->
-          <div class="w-72 shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col min-h-0">
+        <!-- 右侧：信息面板 -->
+        <div class="w-72 shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col min-h-0">
             <!-- Tab 标签 -->
             <div class="flex border-b border-gray-200">
               <button v-for="tab in tabs" :key="tab.key" @click="activeTab = tab.key"

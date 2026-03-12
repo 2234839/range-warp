@@ -525,8 +525,8 @@ const testCases: TestCase[] = [
     operation: (adapter, start, end) => adapter.removeStyle(1, 3, 'bold'),
     start: 0,
     end: 4,
-    expectedHTML: '1<em>23</em>4',
-    description: '部分移除外层样式，保留内层样式'
+    expectedHTML: '<strong><em>1</em></strong><em>23</em><strong><em>4</em></strong>',
+    description: '部分移除外层样式，保留内层样式，前段和后段保留外层样式'
   },
 
   // ==================== 真实用户场景 ====================

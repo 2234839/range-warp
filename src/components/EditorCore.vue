@@ -1,9 +1,12 @@
 <script setup lang="ts">
   import { ref, onMounted, useTemplateRef } from 'vue';
   import { useEventListener, useDebounceFn } from '@vueuse/core';
-  import { Editor, DOMRangeAdapter, BLOCK_TAG_NAMES, getNonCopyableSelector } from '../core/index';
+  import { Editor, DOMRangeAdapter } from '../core/index';
   import type { Editor as EditorType } from '../core/index';
   import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition } from './editor-utils';
+
+  /** 重置格式状态时复用同一个对象（避免每次 spread 创建新对象） */
+  const CLEARED_FORMAT_STATE = { ...EMPTY_FORMAT_STATE };
 
   /** 工具栏按钮配置 */
   interface ToolbarButtonConfig {
@@ -137,7 +140,7 @@
       persistentSelection.value = null;
       currentSelection.value = { start: 0, end: 0, text: '' };
       CSS.highlights?.delete('editor-selection');
-      formatState.value = { ...EMPTY_FORMAT_STATE };
+      formatState.value = CLEARED_FORMAT_STATE;
       emit('selectionChange', 0, 0, '');
       return;
     }
@@ -147,8 +150,9 @@
     if (!pos) return;
 
     const text = range.toString();
-    persistentSelection.value = { start: pos.start, end: pos.end, text };
-    currentSelection.value = { start: pos.start, end: pos.end, text };
+    const selectionState = { start: pos.start, end: pos.end, text };
+    persistentSelection.value = selectionState;
+    currentSelection.value = selectionState;
 
     /* 使用 CSS Custom Highlight API 高亮选区 */
     if (CSS.highlights) {
@@ -183,16 +187,12 @@
     debouncedRepair();
   }
 
-  /** 不可复制容器的 CSS 选择器 */
-  const NON_COPYABLE_SELECTOR = getNonCopyableSelector();
-
   /**
    * 拦截复制/剪切事件，清洗剪贴板 HTML
    *
-   * 1. 从选区提取 HTML 片段
+   * 1. 从选区提取 HTML 片段（cloneContents 已包含格式化祖先）
    * 2. 清洗不可复制容器（书签、修订等），保留文本和内联样式
-   * 3. 补回 range.cloneContents() 丢失的祖先格式化元素（如 em、strong）
-   * 4. 写入剪贴板
+   * 3. 写入剪贴板
    */
   function handleCopyCut(event: ClipboardEvent) {
     if (!editor.value) return;
@@ -209,12 +209,8 @@
     const wrapper = document.createElement('div');
     wrapper.appendChild(fragment);
 
-    /** 清洗不可复制容器 */
-    const sanitizedHTML = editor.value.sanitizeHTML(wrapper.innerHTML);
-
-    /** 补回 cloneContents 丢失的格式化祖先上下文 */
-    const ancestors = getFormattingAncestors(range, editorContainer.value);
-    const html = wrapWithFormatting(sanitizedHTML, ancestors);
+    /** 清洗不可复制容器，保留文本和内联样式 */
+    const html = editor.value.sanitizeHTML(wrapper.innerHTML);
 
     event.clipboardData?.setData('text/html', html);
     event.clipboardData?.setData('text/plain', selection.toString());
@@ -228,46 +224,6 @@
   }
 
   /**
-   * 获取选区的格式化祖先元素（从内到外）
-   *
-   * 使用黑名单策略：保留所有内联祖先，只排除块级元素和不可复制的语义容器。
-   * 这样任意富文本格式化元素（如自定义 span、font 等）都能被保留。
-   */
-  function getFormattingAncestors(range: Range, container: Element): Element[] {
-    const common = range.commonAncestorContainer;
-    let node: Node | null = common.nodeType === Node.ELEMENT_NODE ? common : common.parentElement;
-    const ancestors: Element[] = [];
-
-    while (node && node !== container) {
-      if (node instanceof Element) {
-        /* 块级元素终止祖先链（格式化上下文在块边界处断裂） */
-        if (BLOCK_TAG_NAMES.has(node.tagName.toLowerCase())) break;
-        /* 跳过不可复制的语义容器（书签、修订等），但继续向上查找 */
-        if (NON_COPYABLE_SELECTOR && node.matches(NON_COPYABLE_SELECTOR)) {
-          node = node.parentElement;
-          continue;
-        }
-        ancestors.push(node);
-      }
-      node = node.parentElement;
-    }
-
-    return ancestors;
-  }
-
-  /**
-   * 用格式化祖先包裹 HTML 字符串（从外到内逐层包裹）
-   */
-  function wrapWithFormatting(html: string, ancestors: Element[]): string {
-    let result = html;
-    for (let i = ancestors.length - 1; i >= 0; i--) {
-      const tag = ancestors[i].tagName.toLowerCase();
-      result = `<${tag}>${result}</${tag}>`;
-    }
-    return result;
-  }
-
-  /**
    * 更新格式状态 - 使用编辑器 API
    */
   function updateFormatState() {
@@ -275,7 +231,7 @@
 
     const { start, end } = currentSelection.value;
     if (start === end) {
-      formatState.value = { ...EMPTY_FORMAT_STATE };
+      formatState.value = CLEARED_FORMAT_STATE;
       return;
     }
 

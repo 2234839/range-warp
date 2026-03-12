@@ -11,7 +11,7 @@
  */
 
 import type { IRangeAdapter, WrapOptions } from './IRangeAdapter';
-import { getElementPosition as getElementPositionShared, getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils';
+import { getElementPosition, getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils';
 
 /**
  * 容器标签配置
@@ -226,9 +226,19 @@ function unwrapChildNodes(element: Element): void {
   parent.replaceChild(fragment, element);
 }
 
-/** 获取所有样式标签名集合（不含 attributeSelector 的配置） */
-export function getStyleTagNames(): Set<string> {
-  return new Set(buildTagToConfigName().keys());
+/**
+ * 查找文本节点的直接样式祖先元素（不越过 outerBoundary）
+ * @returns 样式祖先元素或 null
+ */
+function findDirectStyledParent(node: Node, outerBoundary: Element): Element | null {
+  let current: Node | null = node.parentNode;
+  while (current && current !== outerBoundary) {
+    if (current instanceof Element && isSupportedStyleElement(current)) {
+      return current;
+    }
+    current = current.parentNode;
+  }
+  return null;
 }
 
 /** 块级元素标签名集合 */
@@ -423,13 +433,6 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 计算元素在容器中的文本位置（DOM Range 方式，支持无文本内容的元素如 <br>）
-   */
-  private getElementPosition(element: Element): { start: number; end: number } | null {
-    return getElementPositionShared(element, this._container);
-  }
-
-  /**
    * 获取范围内的所有块级元素
    * @param start 起始位置
    * @param end 结束位置
@@ -441,21 +444,16 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const index = this._buildTextNodeIndex();
 
     for (const elem of allElements) {
-      /* BR 等无文本内容元素需要 DOM Range 方式计算位置 */
-      const pos = elem.tagName.toLowerCase() === 'br'
-        ? this.getElementPosition(elem)
+      const isBR = elem.tagName.toLowerCase() === 'br';
+      const pos = isBR
+        ? getElementPosition(elem, this._container)
         : this._getPositionFromIndex(elem, index);
       if (!pos) continue;
 
-      if (elem.tagName.toLowerCase() === 'br') {
-        /* BR 是零宽度块边界，使用包含式检查 */
-        if (pos.start >= start && pos.start < end) {
-          blockElements.push(elem);
-        }
-      } else {
-        if (pos.start < end && pos.end > start) {
-          blockElements.push(elem);
-        }
+      if (isBR
+        ? (pos.start >= start && pos.start < end)
+        : (pos.start < end && pos.end > start)) {
+        blockElements.push(elem);
       }
     }
 
@@ -469,8 +467,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * @param config 样式配置
    */
   private applyStyleAcrossBlocks(start: number, end: number, config: ContainerTagConfig): void {
-    const snapshot = this.getTextNodesWithPositions(this._container);
-    const index = this._buildTextNodeIndex();
+    const { snapshot, index } = this._buildTextNodeData();
 
     for (const { node, nodeStart, nodeEnd } of snapshot) {
       /* 检查此文本节点是否在范围内 */
@@ -639,7 +636,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * @param elementCreator 元素创建函数
    */
   private wrapAcrossBlocks(start: number, end: number, elementCreator: () => Element): void {
-    const snapshot = this.getTextNodesWithPositions(this._container);
+    const snapshot = this._buildTextNodeData().snapshot;
 
     /* 遍历快照，对范围内的文本节点创建包裹 */
     for (const { node, nodeStart, nodeEnd } of snapshot) {
@@ -795,7 +792,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     // 前段 (保留样式)
     if (!removeFromStart) {
       const beforeElement = element.cloneNode(false);
-      const beforeRange = this.createDOMRangeInElement(element, 0, removeStart);
+      const beforeRange = this.createRangeInRoot(element, 0, removeStart, false);
       if (beforeRange) {
         const beforeContent = beforeRange.cloneContents();
         beforeElement.appendChild(beforeContent);
@@ -804,7 +801,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     }
 
     // 中段 (移除样式 - 纯文本)
-    const middleRange = this.createDOMRangeInElement(element, removeStart, removeEnd);
+    const middleRange = this.createRangeInRoot(element, removeStart, removeEnd, false);
     if (middleRange) {
       const middleText = middleRange.toString();
       if (middleText) {
@@ -815,7 +812,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     // 后段 (保留样式)
     if (!removeToEnd) {
       const afterElement = element.cloneNode(false);
-      const afterRange = this.createDOMRangeInElement(element, removeEnd, elementLength);
+      const afterRange = this.createRangeInRoot(element, removeEnd, elementLength, false);
       if (afterRange) {
         const afterContent = afterRange.cloneContents();
         afterElement.appendChild(afterContent);
@@ -833,10 +830,6 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * @param end 结束偏移
    * @returns Range 或 null
    */
-  private createDOMRangeInElement(element: Element, start: number, end: number): Range | null {
-    return this.createRangeInRoot(element, start, end, false);
-  }
-
   /**
    * 处理元素以移除部分样式，保留内部样式
    * @param element 要处理的元素
@@ -849,68 +842,61 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const removeFromStart = removeStart === 0;
     const removeToEnd = removeEnd === getUnicodeStringLength(element.textContent || '');
 
-    // 获取元素的所有文本节点及其位置
     const textNodes = this.getTextNodesWithPositions(element);
 
-    // 第一段：移除起始位置之前（移除所有样式，包括内部样式）
+    /**
+     * 将文本附加到容器中，保留内部样式父元素
+     */
+    const appendWithStyle = (container: Node, node: Text, text: string) => {
+      const styledParent = findDirectStyledParent(node, element);
+      if (styledParent) {
+        const cloned = styledParent.cloneNode(false);
+        cloned.textContent = text;
+        container.appendChild(cloned);
+      } else {
+        container.appendChild(document.createTextNode(text));
+      }
+    };
+
+    // 第一段：移除起始位置之前（保留外层样式和内部样式）
     if (!removeFromStart) {
+      const beforeWrapper = element.cloneNode(false);
       for (const { node, nodeStart, nodeEnd } of textNodes) {
         if (nodeEnd <= removeStart) {
-          const text = node.textContent || '';
-          fragment.appendChild(document.createTextNode(text));
+          appendWithStyle(beforeWrapper, node, node.textContent || '');
         } else if (nodeStart < removeStart) {
-          const text = node.textContent || '';
-          const utf16End = getUtf16Offset(text, removeStart - nodeStart);
-          fragment.appendChild(document.createTextNode(text.slice(0, utf16End)));
+          const utf16End = getUtf16Offset(node.textContent || '', removeStart - nodeStart);
+          appendWithStyle(beforeWrapper, node, (node.textContent || '').slice(0, utf16End));
         }
       }
+      fragment.appendChild(beforeWrapper);
     }
 
     // 第二段：移除范围内的内容（移除外层样式，保留内部样式）
     for (const { node, nodeStart, nodeEnd } of textNodes) {
       if (nodeStart >= removeStart && nodeEnd <= removeEnd) {
-        fragment.appendChild(node.cloneNode(true));
+        appendWithStyle(fragment, node, node.textContent || '');
       } else if (nodeStart < removeEnd && nodeEnd > removeStart) {
         const text = node.textContent || '';
         const unicodeLen = getUnicodeStringLength(text);
         const startInNode = Math.max(0, removeStart - nodeStart);
         const endInNode = Math.min(unicodeLen, removeEnd - nodeStart);
-        const middleText = getUtf16Slice(text, startInNode, endInNode);
-
-        let currentParent: Node | null = node.parentNode;
-        let hasStyledParent = false;
-        while (currentParent && currentParent !== element) {
-          if (currentParent instanceof Element) {
-            if (isSupportedStyleElement(currentParent)) {
-              hasStyledParent = true;
-              break;
-            }
-          }
-          currentParent = currentParent.parentNode;
-        }
-
-        if (hasStyledParent && node.parentNode) {
-          const clonedParent = node.parentNode.cloneNode(false);
-          clonedParent.textContent = middleText;
-          fragment.appendChild(clonedParent);
-        } else {
-          fragment.appendChild(document.createTextNode(middleText));
-        }
+        appendWithStyle(fragment, node, getUtf16Slice(text, startInNode, endInNode));
       }
     }
 
-    // 第三段：移除结束位置之后（移除所有样式，包括内部样式）
+    // 第三段：移除结束位置之后（保留外层样式和内部样式）
     if (!removeToEnd) {
+      const afterWrapper = element.cloneNode(false);
       for (const { node, nodeStart, nodeEnd } of textNodes) {
         if (nodeStart >= removeEnd) {
-          const text = node.textContent || '';
-          fragment.appendChild(document.createTextNode(text));
+          appendWithStyle(afterWrapper, node, node.textContent || '');
         } else if (nodeEnd > removeEnd) {
-          const text = node.textContent || '';
-          const utf16Start = getUtf16Offset(text, removeEnd - nodeStart);
-          fragment.appendChild(document.createTextNode(text.slice(utf16Start)));
+          const utf16Start = getUtf16Offset(node.textContent || '', removeEnd - nodeStart);
+          appendWithStyle(afterWrapper, node, (node.textContent || '').slice(utf16Start));
         }
       }
+      fragment.appendChild(afterWrapper);
     }
 
     return fragment;
@@ -950,13 +936,16 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 构建容器内所有文本节点的位置索引
+   * 单次 TreeWalker 遍历同时构建文本节点快照和位置索引
    *
-   * 一次 TreeWalker 遍历 O(T)，后续每个元素的位置查询通过 Map 查找 O(1)，
-   * 替代 getElementPosition 每次调用创建 2 个 DOM Range 的 O(R) 开销。
-   * 索引在函数调用结束后自动 GC，不存在缓存失效风险。
+   * 替代分别调用 getTextNodesWithPositions + _buildTextNodeIndex（两次遍历），
+   * 在需要同时使用快照和索引的方法中（applyStyleAcrossBlocks、_fillGaps）合并为一次遍历
    */
-  private _buildTextNodeIndex(): Map<Text, { start: number; end: number }> {
+  private _buildTextNodeData(): {
+    snapshot: Array<{ node: Text; nodeStart: number; nodeEnd: number }>;
+    index: Map<Text, { start: number; end: number }>;
+  } {
+    const snapshot: Array<{ node: Text; nodeStart: number; nodeEnd: number }> = [];
     const index = new Map<Text, { start: number; end: number }>();
     let pos = 0;
     const walker = document.createTreeWalker(this._container, NodeFilter.SHOW_TEXT);
@@ -964,10 +953,24 @@ export class DOMRangeAdapter implements IRangeAdapter {
     while ((node = walker.nextNode())) {
       if (!(node instanceof Text)) continue;
       const len = getUnicodeStringLength(node.textContent || '');
-      if (len > 0) index.set(node, { start: pos, end: pos + len });
+      if (len > 0) {
+        index.set(node, { start: pos, end: pos + len });
+        snapshot.push({ node, nodeStart: pos, nodeEnd: pos + len });
+      }
       pos += len;
     }
-    return index;
+    return { snapshot, index };
+  }
+
+  /**
+   * 构建容器内所有文本节点的位置索引
+   *
+   * 一次 TreeWalker 遍历 O(T)，后续每个元素的位置查询通过 Map 查找 O(1)，
+   * 替代 getElementPosition 每次调用创建 2 个 DOM Range 的 O(R) 开销。
+   * 索引在函数调用结束后自动 GC，不存在缓存失效风险。
+   */
+  private _buildTextNodeIndex(): Map<Text, { start: number; end: number }> {
+    return this._buildTextNodeData().index;
   }
 
   /**
@@ -1003,7 +1006,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
       const parent = element.parentElement;
       if (parent && isSupportedStyleElement(parent) &&
           isSameContainerType(element, parent)) {
-        this.mergeRedundantTags(element);
+        unwrapChildNodes(element);
         continue;
       }
 
@@ -1018,15 +1021,6 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     /* 合并相邻的相同标签 */
     this.mergeAdjacentSameTags(start, end, selector);
-  }
-
-  /**
-   * 合并冗余的嵌套标签
-   * @param child 子标签
-   * @param parent 父标签
-   */
-  private mergeRedundantTags(child: Element): void {
-    unwrapChildNodes(child);
   }
 
   /**
@@ -1100,21 +1094,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   getDocumentLength(): number {
-    /*
-     * 使用与 createDOMRange 一致的位置计算方式（不包含换行符），
-     * 确保 findText / setStyle / insertText 等操作的位置系统一致
-     */
-    let length = 0;
-    const walker = document.createTreeWalker(
-      this._container,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-    let node;
-    while ((node = walker.nextNode())) {
-      length += getUnicodeStringLength(node.textContent || '');
-    }
-    return length;
+    const snapshot = this._buildTextNodeData().snapshot;
+    return snapshot.length > 0 ? snapshot[snapshot.length - 1].nodeEnd : 0;
   }
 
   findText(searchText: string): Array<{ start: number; end: number }> {
@@ -1123,7 +1104,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const searchUtf16Len = searchText.length;
     const searchUnicodeLen = getUnicodeStringLength(searchText);
     const matches: Array<{ start: number; end: number }> = [];
-    const snapshot = this.getTextNodesWithPositions(this._container);
+    const snapshot = this._buildTextNodeData().snapshot;
 
     for (const { node, nodeStart } of snapshot) {
       const text = node.textContent || '';
@@ -1306,21 +1287,26 @@ export class DOMRangeAdapter implements IRangeAdapter {
     }
 
     /* 范围内的总文本长度大于已覆盖的长度 → 存在间隙 */
-    const totalText = this.getText(bounds.min, bounds.max);
-    return getUnicodeStringLength(totalText) > coveredLength;
+    /* bounds 由文本节点索引计算，bounds.max - bounds.min 即为范围内的字符总数，无需创建 DOM Range */
+    return (bounds.max - bounds.min) > coveredLength;
   }
 
   /**
    * 填充间隙：将逻辑范围内未包裹的文本节点包裹为同类型元素
    */
   private _fillGaps(elements: Element[], config: ContainerTagConfig, id: string): void {
-    const bounds = this._getGroupBounds(elements);
-    if (!bounds || bounds.min >= bounds.max) return;
+    const { snapshot, index } = this._buildTextNodeData();
 
-    const minPos = bounds.min;
-    const maxPos = bounds.max;
+    /* 从索引计算逻辑范围 */
+    let minPos = Infinity, maxPos = 0;
+    for (const element of elements) {
+      const pos = this._getPositionFromIndex(element, index);
+      if (!pos) continue;
+      minPos = Math.min(minPos, pos.start);
+      maxPos = Math.max(maxPos, pos.end);
+    }
+    if (minPos === Infinity || minPos >= maxPos) return;
 
-    const snapshot = this.getTextNodesWithPositions(this._container);
     const idAttr = config.idAttribute!;
     const newElements: Element[] = [];
 
