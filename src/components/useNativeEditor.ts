@@ -9,13 +9,7 @@ import { ref, shallowRef } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { Editor, DOMRangeAdapter } from '../core/index';
 import type { Editor as EditorType } from '../core/index';
-import type { EditorComposable } from './editor-utils';
-
-/** 选区上下文（原生模式） */
-interface SelectionContext {
-  ownerWindow: Window;
-  container: HTMLElement | null;
-}
+import type { EditorComposable, SelectionContext } from './editor-utils';
 
 /** composable 参数 */
 interface UseNativeEditorOptions {

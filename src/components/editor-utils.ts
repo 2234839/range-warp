@@ -10,6 +10,12 @@ import type { Ref, ShallowRef } from 'vue';
 import type { Editor as EditorType } from '../core/index';
 import { getUnicodeStringLength } from '../core/utils';
 
+/** 选区上下文（适用于原生模式和 iframe 模式） */
+export interface SelectionContext {
+  ownerWindow: Window;
+  container: HTMLElement | null;
+}
+
 /** 格式状态的类型定义 */
 export interface FormatState {
   bold: boolean;
@@ -42,7 +48,7 @@ export interface EditorComposable {
   /** 编辑器实例（shallowRef 避免深层响应式解包类实例） */
   editor: ShallowRef<EditorType | null>;
   /** 选区上下文（window + container） */
-  selectionContext: Ref<{ ownerWindow: Window; container: HTMLElement | null }>;
+  selectionContext: Ref<SelectionContext>;
   /** 是否正在加载（原生模式始终为 false） */
   loading: Ref<boolean>;
   /** 是否就绪（原生模式始终为 true） */

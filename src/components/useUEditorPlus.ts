@@ -9,13 +9,7 @@ import { ref, shallowRef, nextTick } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { Editor, DOMRangeAdapter } from '../core/index';
 import type { Editor as EditorType } from '../core/index';
-import type { EditorComposable } from './editor-utils';
-
-/** 选区上下文（iframe 场景） */
-interface SelectionContext {
-  ownerWindow: Window;
-  container: HTMLElement | null;
-}
+import type { EditorComposable, SelectionContext } from './editor-utils';
 
 /** composable 参数 */
 interface UseUEditorPlusOptions {

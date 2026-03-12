@@ -1,13 +1,9 @@
 <script setup lang="ts">
-  import { ref, onMounted, useTemplateRef, readonly } from 'vue';
-  import { Editor, DOMRangeAdapter } from '../core/index';
-  import type { Editor as EditorType } from '../core/index';
+  import { ref, onMounted, onBeforeUnmount, useTemplateRef, readonly } from 'vue';
+  import { useNativeEditor } from './useNativeEditor';
   import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition } from './editor-utils';
 
   const editDiv = useTemplateRef('editDiv');
-
-  /** Editor 实例 */
-  const editor = ref<EditorType | null>(null);
 
   /** 当前选中的文本格式状态 */
   const formatState = ref({ ...EMPTY_FORMAT_STATE });
@@ -29,24 +25,28 @@
 
   const emit = defineEmits<Emits>();
 
-  /** 防止递归触发 */
-  const isProcessing = ref(false);
+  /** 原生编辑器 composable */
+  const composable = useNativeEditor({
+    containerRef: editDiv,
+    currentUser: 'anonymous',
+    onSelectionChange: () => {
+      updateFormatState();
+      updateSelectedRange();
+    },
+  });
 
   onMounted(() => {
-    if (!editDiv.value) return;
+    composable.init();
+  });
 
-    const adapter = new DOMRangeAdapter({
-      container: editDiv.value,
-    });
-
-    editor.value = new Editor({
-      adapter,
-    });
+  onBeforeUnmount(() => {
+    composable.destroy();
   });
 
   /** 应用文本格式 - 支持切换状态 */
   function applyFormat(format: string, start?: number, end?: number) {
-    if (!editor.value) return;
+    const ed = composable.editor.value;
+    if (!ed) return;
 
     const styleKey = STYLE_KEYS[format];
     if (!styleKey) return;
@@ -55,17 +55,18 @@
     let rangeStart = start;
     let rangeEnd = end;
     if (rangeStart === undefined || rangeEnd === undefined) {
-      if (!editDiv.value) return;
-      const pos = getSelectionPosition(editDiv.value);
+      const { ownerWindow, container } = composable.selectionContext.value;
+      if (!container) return;
+      const pos = getSelectionPosition(container, ownerWindow);
       if (!pos) return;
       rangeStart = pos.start;
       rangeEnd = pos.end;
     }
 
     if (formatState.value[styleKey]) {
-      editor.value.removeStyle(rangeStart, rangeEnd, format);
+      ed.removeStyle(rangeStart, rangeEnd, format);
     } else {
-      editor.value.applyStyle(rangeStart, rangeEnd, format);
+      ed.applyStyle(rangeStart, rangeEnd, format);
     }
 
     emit('formatApply', rangeStart, rangeEnd, format);
@@ -74,39 +75,30 @@
 
   /** 更新格式状态 */
   function updateFormatState() {
-    if (!editor.value || !editDiv.value) return;
+    const ed = composable.editor.value;
+    const { ownerWindow, container } = composable.selectionContext.value;
+    if (!ed || !container) return;
 
-    const pos = getSelectionPosition(editDiv.value);
+    const pos = getSelectionPosition(container, ownerWindow);
     if (!pos || pos.start === pos.end) {
       formatState.value = { ...EMPTY_FORMAT_STATE };
       return;
     }
 
-    formatState.value = editor.value.getFormatState(pos.start, pos.end);
+    formatState.value = ed.getFormatState(pos.start, pos.end);
   }
 
   /** 复制HTML内容 */
   function copyHTML() {
-    if (!editDiv.value) return;
-
-    const htmlContent = editDiv.value.innerHTML;
-
-    navigator.clipboard.writeText(htmlContent);
-  }
-
-  /** 处理选择变化事件 */
-  function handleSelectionChange() {
-    if (!isProcessing.value) {
-      updateFormatState();
-      updateSelectedRange();
-    }
+    navigator.clipboard.writeText(composable.getHTML());
   }
 
   /** 更新选中的文本范围 */
   function updateSelectedRange() {
-    if (!editDiv.value) return;
+    const { ownerWindow, container } = composable.selectionContext.value;
+    if (!container) return;
 
-    const selection = window.getSelection();
+    const selection = ownerWindow.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.getRangeAt(0).collapsed) {
       selectedRange.value = { start: 0, end: 0 };
       selectedText.value = '';
@@ -114,7 +106,7 @@
       return;
     }
 
-    const pos = getSelectionPosition(editDiv.value);
+    const pos = getSelectionPosition(container, ownerWindow);
     if (!pos) return;
 
     selectedRange.value = { start: pos.start, end: pos.end };
@@ -214,8 +206,6 @@
     <div
       contenteditable="true"
       ref="editDiv"
-      @mouseup="handleSelectionChange"
-      @keyup="handleSelectionChange"
       class="p-4 min-h-[200px] outline-none leading-relaxed text-sm whitespace-pre-wrap break-words focus:bg-gray-50/50">
       测试文本 测试中
     </div>

@@ -209,7 +209,7 @@
           <span class="text-gray-400">&lt;</span>
           <span class="text-blue-600">{{ node.tag }}</span>
           <template v-for="(attr, i) in node.attrs" :key="i">
-            <span class="text-gray-300 ml-1">{{ attr.name }}</span><span class="text-gray-400">=</span><span class="text-orange-500">"{{ attr.value }}"</span>
+            <span class="text-orange-600 ml-1">{{ attr.name }}</span><span class="text-gray-400">=</span><span class="text-orange-500">"{{ attr.value }}"</span>
           </template>
           <!-- 空元素 → <tag /> -->
           <template v-if="node.selfClosing">

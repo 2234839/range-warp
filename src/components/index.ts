@@ -8,8 +8,14 @@ export { default as BaseButton } from './BaseButton.vue';
 export { default as BaseInput } from './BaseInput.vue';
 
 // 业务组件
+export { default as EditorCore } from './EditorCore.vue';
 export { default as RangeForm } from './RangeForm.vue';
 export { default as RangeWrap } from './RangeWrap.vue';
+
+// Composable
+export { useNativeEditor } from './useNativeEditor';
+export { useUEditorPlus } from './useUEditorPlus';
+export type { EditorComposable, SelectionContext } from './editor-utils';
 
 // 组件类型定义
 export type ButtonSize = 'small' | 'medium' | 'large';
