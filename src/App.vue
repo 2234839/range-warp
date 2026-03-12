@@ -129,15 +129,16 @@
 
     const { start, end } = selectedRange.value;
     const range = editor.value.createRange(start, end);
-    const create = type === 'insert'
-      ? editor.value.revisions.createInsert
-      : editor.value.revisions.createDelete;
 
-    create({
+    const options = {
       range,
       author: 'current-user',
       comment: `手动标记的${type === 'insert' ? '插入' : '删除'}修订`,
-    });
+    };
+
+    type === 'insert'
+      ? editor.value.revisions.createInsert(options)
+      : editor.value.revisions.createDelete(options);
 
     refreshRevisions();
   }
