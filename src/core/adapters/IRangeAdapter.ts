@@ -175,13 +175,13 @@ export interface IRangeAdapter {
   sanitizeHTML(html: string): string;
 
   /**
-   * 查询范围内存在的样式标签集合
+   * 查询范围内存在的样式集合
    *
    * 单次 DOM 查询获取所有样式元素，避免多次 querySelectorAll
    *
    * @param start 范围起始（Unicode 字符位置）
    * @param end 范围结束（Unicode 字符位置）
-   * @returns 存在的样式标签名集合（如 'strong', 'em'）
+   * @returns 样式配置名集合（如 'bold', 'italic'）
    */
   getStylesInRange(start: number, end: number): Set<string>;
 

@@ -121,47 +121,6 @@ export class Range {
   }
 
   /**
-   * 检查选区是否包含特定样式
-   * @param style 样式类型
-   * @returns 是否包含
-   */
-  hasStyle(style: string): boolean {
-    return this._adapter.getStylesInRange(this.start, this.end).has(style);
-  }
-
-  /**
-   * 创建新的选区
-   * @param start 新的起始位置
-   * @param end 新的结束位置
-   * @returns 新的 Range 实例
-   */
-  createSubRange(start: number, end: number): Range {
-    return new Range({
-      start: this.start + start,
-      end: this.start + end,
-      adapter: this._adapter,
-    });
-  }
-
-  /**
-   * 检查是否与另一个选区重叠
-   * @param other 另一个选区
-   * @returns 是否重叠
-   */
-  overlaps(other: Range): boolean {
-    return this.start < other.end && this.end > other.start;
-  }
-
-  /**
-   * 检查是否包含另一个选区
-   * @param other 另一个选区
-   * @returns 是否包含
-   */
-  contains(other: Range): boolean {
-    return this.start <= other.start && this.end >= other.end;
-  }
-
-  /**
    * 转换为字符串表示
    * @returns 字符串
    */

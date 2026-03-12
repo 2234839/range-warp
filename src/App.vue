@@ -1,6 +1,6 @@
 <script setup lang="ts">
-  import { ref, watch, onMounted, computed } from 'vue';
-  import { useStorage, useDebounceFn, useIntervalFn } from '@vueuse/core';
+  import { ref, watch, computed } from 'vue';
+  import { useStorage, useDebounceFn } from '@vueuse/core';
   import EditorCore from './components/EditorCore.vue';
   import DomTreePanel from './components/DomTreePanel.vue';
   import diff from 'fast-diff';
@@ -20,56 +20,38 @@
     editorRef.value.editor.createRange(start, end).select();
   }
 
-  /** 保存状态：'idle' | 'saving' | 'saved' */
-  const saveStatus = ref<'idle' | 'saving' | 'saved'>('idle');
+  /** 保存状态 */
+  const saveStatus = ref<'idle' | 'saved'>('idle');
 
-  /** 倒计时（毫秒） */
-  const saveCountdown = ref(0);
-
-  /** 节流保存函数（500ms） */
+  /** 防抖保存函数（500ms） */
   const debouncedSave = useDebounceFn(() => {
-    saveStatus.value = 'saving';
-
-    setTimeout(() => {
-      saveStatus.value = 'saved';
-      setTimeout(() => {
-        saveStatus.value = 'idle';
-      }, 2000);
-    }, 100);
+    saveStatus.value = 'saved';
+    setTimeout(() => { saveStatus.value = 'idle'; }, 2000);
   }, 500);
-
-  /** 启动倒计时 */
-  const { pause } = useIntervalFn(
-    () => {
-      if (saveCountdown.value > 0) {
-        saveCountdown.value -= 100;
-      } else {
-        pause();
-      }
-    },
-    100,
-    { immediate: true }
-  );
 
   /** 保存状态文本 */
   const saveStatusText = computed(() => {
-    if (saveStatus.value === 'saving') return '保存中...';
-    if (saveStatus.value === 'saved') return '已保存';
-    if (saveCountdown.value > 0) return `${Math.ceil(saveCountdown.value / 1000)}秒后保存`;
-    return '';
+    return saveStatus.value === 'saved' ? '已保存' : '';
   });
 
   /** 触发保存 */
-  const triggerSave = () => {
-    debouncedSave();
-    saveCountdown.value = 500;
-  };
+  const triggerSave = () => debouncedSave();
 
   /** 当前激活的 Tab */
   const activeTab = ref<'info' | 'bookmarks' | 'revisions'>('info');
 
+  /** Tab 配置 */
+  const tabs: ReadonlyArray<{ key: typeof activeTab.value; label: string }> = [
+    { key: 'info', label: '信息' },
+    { key: 'bookmarks', label: '书签' },
+    { key: 'revisions', label: '修订' },
+  ];
+
   /** 当前选中的文本范围 - 使用持久化选区（不受编辑器外部操作影响） */
   const selectedRange = computed(() => editorRef.value?.persistentSelection || { start: 0, end: 0, text: '' });
+
+  /** 是否有选中文本 */
+  const hasSelection = computed(() => selectedRange.value.start !== selectedRange.value.end);
 
   /** 编辑器实例（便捷访问） */
   const editor = computed(() => editorRef.value?.editor);
@@ -115,7 +97,7 @@
 
   /** 创建书签 */
   function createBookmark() {
-    if (!editor.value || selectedRange.value.start === selectedRange.value.end) return;
+    if (!editor.value || !hasSelection.value) return;
 
     const { start, end } = selectedRange.value;
 
@@ -141,35 +123,20 @@
     refreshBookmarks();
   }
 
-  /** 创建插入修订 */
-  function createInsertRevision() {
-    if (!editor.value || selectedRange.value.start === selectedRange.value.end) return;
+  /** 创建修订 */
+  function createRevision(type: 'insert' | 'delete') {
+    if (!editor.value || !hasSelection.value) return;
 
     const { start, end } = selectedRange.value;
-
-    // 创建插入修订，将选中文本标记为插入内容
     const range = editor.value.createRange(start, end);
-    editor.value.revisions.createInsert({
+    const create = type === 'insert'
+      ? editor.value.revisions.createInsert
+      : editor.value.revisions.createDelete;
+
+    create({
       range,
       author: 'current-user',
-      comment: '手动标记的插入修订',
-    });
-
-    refreshRevisions();
-  }
-
-  /** 创建删除修订 */
-  function createDeleteRevision() {
-    if (!editor.value || selectedRange.value.start === selectedRange.value.end) return;
-
-    const { start, end } = selectedRange.value;
-
-    // 创建删除修订，将选中文本标记为待删除内容
-    const range = editor.value.createRange(start, end);
-    editor.value.revisions.createDelete({
-      range,
-      author: 'current-user',
-      comment: '手动标记的删除修订',
+      comment: `手动标记的${type === 'insert' ? '插入' : '删除'}修订`,
     });
 
     refreshRevisions();
@@ -185,7 +152,7 @@
 
   /** 比较并创建修订 */
   function compareAndCreateRevisions() {
-    if (!editor.value || selectedRange.value.start === selectedRange.value.end) return;
+    if (!editor.value || !hasSelection.value) return;
     if (!comparisonText.value.trim()) return;
 
     const originalText = selectedOriginalText.value;
@@ -211,8 +178,8 @@
     }
 
     // 从后往前执行，避免位置偏移
-    for (const operation of [...operations].reverse()) {
-      const { type, text, position } = operation;
+    for (let i = operations.length - 1; i >= 0; i--) {
+      const { type, text, position } = operations[i];
 
       if (type === diff.EQUAL) {
         // 相同部分，无需处理
@@ -226,7 +193,7 @@
         const range = editor.value!.createRange(position, position);
         range.insertText(text);
         // 创建插入修订
-        const newRange = editor.value!.createRange(position, position + getUnicodeStringLength(text));
+        const newRange = editor.value!.createRange(position, endPos);
         editor.value!.revisions.createInsert({
           range: newRange,
           author: 'current-user',
@@ -251,48 +218,31 @@
     refreshRevisions();
   }
 
-  /** 接受所有修订 */
-  function acceptAllRevisions() {
+  /** 解决所有修订 */
+  function resolveAllRevisions(isAccept: boolean) {
     if (!editor.value) return;
-    editor.value.revisions.acceptAll();
+    isAccept ? editor.value.revisions.acceptAll() : editor.value.revisions.rejectAll();
     refreshRevisions();
   }
 
-  /** 拒绝所有修订 */
-  function rejectAllRevisions() {
+  /** 解决单个修订 */
+  function resolveRevision(id: string, isAccept: boolean) {
     if (!editor.value) return;
-    editor.value.revisions.rejectAll();
+    isAccept ? editor.value.revisions.acceptById(id) : editor.value.revisions.rejectById(id);
     refreshRevisions();
   }
 
-  /** 接受修订 */
-  function acceptRevision(id: string) {
-    if (!editor.value) return;
-    editor.value.revisions.acceptById(id);
-    refreshRevisions();
-  }
-
-  /** 拒绝修订 */
-  function rejectRevision(id: string) {
-    if (!editor.value) return;
-    editor.value.revisions.rejectById(id);
-    refreshRevisions();
-  }
-
-  /** 监听编辑器初始化 */
-  onMounted(() => {
-    // 等待编辑器初始化完成后刷新数据
-    watch(
-      () => editor.value,
-      (ed) => {
-        if (ed) {
-          refreshBookmarks();
-          refreshRevisions();
-        }
-      },
-      { immediate: true }
-    );
-  });
+  /** 编辑器初始化完成后刷新数据 */
+  watch(
+    () => editor.value,
+    (ed) => {
+      if (ed) {
+        refreshBookmarks();
+        refreshRevisions();
+      }
+    },
+    { immediate: true }
+  );
 
   /** 监听标签切换，刷新对应数据 */
   watch(activeTab, (newTab) => {
@@ -319,15 +269,8 @@
           <DomTreePanel :html="editorContent" @select="handleTreeSelect" />
             <!-- 保存状态 -->
             <div class="px-4 py-2 border-t border-gray-200 text-xs flex items-center justify-between">
-              <span v-if="saveStatusText" :class="[
-                  'flex items-center gap-1',
-                  saveStatus === 'saving' ? 'text-blue-600' : saveStatus === 'saved' ? 'text-green-600' : 'text-gray-600'
-                ]">
-                <span v-if="saveStatus === 'saving'"
-                  class="inline-block w-2 h-2 bg-blue-600 rounded-full animate-pulse">
-                </span>
-                <span v-else-if="saveStatus === 'saved'" class="inline-block w-2 h-2 bg-green-600 rounded-full">
-                </span>
+              <span v-if="saveStatusText" class="flex items-center gap-1 text-green-600">
+                <span class="inline-block w-2 h-2 bg-green-600 rounded-full"></span>
                 {{ saveStatusText }}
               </span>
               <span v-else class="text-gray-400">就绪</span>
@@ -342,17 +285,9 @@
           <div class="w-72 shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col min-h-0">
             <!-- Tab 标签 -->
             <div class="flex border-b border-gray-200">
-              <button @click="activeTab = 'info'"
-                :class="['flex-1 px-4 py-2 text-sm font-medium transition-colors', activeTab === 'info' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900']">
-                信息
-              </button>
-              <button @click="activeTab = 'bookmarks'"
-                :class="['flex-1 px-4 py-2 text-sm font-medium transition-colors', activeTab === 'bookmarks' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900']">
-                书签
-              </button>
-              <button @click="activeTab = 'revisions'"
-                :class="['flex-1 px-4 py-2 text-sm font-medium transition-colors', activeTab === 'revisions' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900']">
-                修订
+              <button v-for="tab in tabs" :key="tab.key" @click="activeTab = tab.key"
+                :class="['flex-1 px-4 py-2 text-sm font-medium transition-colors', activeTab === tab.key ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900']">
+                {{ tab.label }}
               </button>
             </div>
 
@@ -361,7 +296,7 @@
               <!-- 信息面板 -->
               <div v-if="activeTab === 'info'" class="p-4 space-y-3 overflow-auto">
                 <!-- 选区信息 -->
-                <div v-if="selectedRange.start !== selectedRange.end">
+                <div v-if="hasSelection">
                   <div class="text-sm">
                     <span class="text-gray-600">起始位置:</span>
                     <span class="ml-2 font-mono">{{ selectedRange.start }}</span>
@@ -394,7 +329,7 @@
               <div v-else-if="activeTab === 'bookmarks'" class="p-4">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-semibold">书签列表</h3>
-                  <button @click="createBookmark" :disabled="selectedRange.start === selectedRange.end"
+                  <button @click="createBookmark" :disabled="!hasSelection"
                     class="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed">
                     + 添加书签
                   </button>
@@ -431,7 +366,7 @@
                 <div class="mb-3 pb-3 border-b border-gray-200">
                   <div class="flex items-center justify-between mb-2">
                     <h3 class="text-sm font-semibold">对比创建修订</h3>
-                    <button @click="toggleComparisonInput" :disabled="selectedRange.start === selectedRange.end"
+                    <button @click="toggleComparisonInput" :disabled="!hasSelection"
                       class="px-2 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed">
                       {{ showComparisonInput ? '收起' : '展开' }}
                     </button>
@@ -460,11 +395,11 @@
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-semibold">快速标记</h3>
                   <div class="flex gap-1">
-                    <button @click="createInsertRevision" :disabled="selectedRange.start === selectedRange.end"
+                    <button @click="createRevision('insert')" :disabled="!hasSelection"
                       class="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed">
                       + 插入修订
                     </button>
-                    <button @click="createDeleteRevision" :disabled="selectedRange.start === selectedRange.end"
+                    <button @click="createRevision('delete')" :disabled="!hasSelection"
                       class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed">
                       + 删除修订
                     </button>
@@ -475,11 +410,11 @@
                 <div class="flex items-center justify-between mb-3 border-t border-gray-200 pt-3">
                   <span class="text-xs text-gray-600">批量操作</span>
                   <div class="flex gap-1">
-                    <button @click="acceptAllRevisions" :disabled="revisions.length === 0"
+                    <button @click="resolveAllRevisions(true)" :disabled="revisions.length === 0"
                       class="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed">
                       全部接受
                     </button>
-                    <button @click="rejectAllRevisions" :disabled="revisions.length === 0"
+                    <button @click="resolveAllRevisions(false)" :disabled="revisions.length === 0"
                       class="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed">
                       全部拒绝
                     </button>
@@ -498,11 +433,11 @@
                         {{ revision.type === 'insert' ? '插入' : '删除' }}
                       </span>
                       <div class="flex gap-1">
-                        <button @click="acceptRevision(revision.id)"
+                        <button @click="resolveRevision(revision.id, true)"
                           class="px-2 py-0.5 bg-green-500 text-white rounded text-xs hover:bg-green-600">
                           接受
                         </button>
-                        <button @click="rejectRevision(revision.id)"
+                        <button @click="resolveRevision(revision.id, false)"
                           class="px-2 py-0.5 bg-red-500 text-white rounded text-xs hover:bg-red-600">
                           拒绝
                         </button>

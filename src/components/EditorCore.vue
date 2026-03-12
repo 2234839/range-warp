@@ -256,8 +256,8 @@
    */
   function wrapWithFormatting(html: string, ancestors: Element[]): string {
     let result = html;
-    for (const ancestor of [...ancestors].reverse()) {
-      const tag = ancestor.tagName.toLowerCase();
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      const tag = ancestors[i].tagName.toLowerCase();
       result = `<${tag}>${result}</${tag}>`;
     }
     return result;
@@ -294,7 +294,7 @@
     }
 
     emit('update:modelValue', getHTML());
-    setTimeout(updateFormatState, 0);
+    requestAnimationFrame(updateFormatState);
   }
 
   /**

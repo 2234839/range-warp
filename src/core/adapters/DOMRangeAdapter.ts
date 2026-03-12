@@ -212,8 +212,8 @@ export function getNonCopyableSelector(): string {
     .join(',');
 }
 
-/** 块级元素选择器（缓存为模块级常量，避免重复构建） */
-const BLOCK_SELECTOR = 'p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, td, th, br';
+/** 块级元素选择器（从 BLOCK_TAG_NAMES 派生，另加 br 换行边界） */
+const BLOCK_SELECTOR = [...BLOCK_TAG_NAMES, 'br'].join(', ');
 
 export interface DOMRangeAdapterOptions {
   /** 编辑器容器元素 */
@@ -676,10 +676,11 @@ export class DOMRangeAdapter implements IRangeAdapter {
           /* 完全包含：移除标签但保留子元素 */
           const parent = element.parentNode;
           if (parent) {
+            const fragment = document.createDocumentFragment();
             while (element.firstChild) {
-              parent.insertBefore(element.firstChild, element);
+              fragment.appendChild(element.firstChild);
             }
-            element.remove();
+            parent.replaceChild(fragment, element);
           }
         } else {
           this.splitElement(element, pos.start, start, end);
@@ -949,12 +950,11 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * @param parent 父标签
    */
   private mergeRedundantTags(child: Element, parent: Element): void {
-    // 将子标签的内容提升到父级
+    const fragment = document.createDocumentFragment();
     while (child.firstChild) {
-      parent.insertBefore(child.firstChild, child);
+      fragment.appendChild(child.firstChild);
     }
-    // 移除空的子标签
-    child.remove();
+    parent.replaceChild(fragment, child);
   }
 
   /**
@@ -1007,10 +1007,9 @@ export class DOMRangeAdapter implements IRangeAdapter {
           prevElem.appendChild(mergeTarget.firstChild);
         }
         processedTags.add(mergeTarget);
-        const emptied = mergeTarget;
         candidate = prevElem.previousSibling;
+        mergeTarget.remove();
         mergeTarget = prevElem;
-        emptied.remove();
       }
     }
   }
@@ -1104,10 +1103,11 @@ export class DOMRangeAdapter implements IRangeAdapter {
         const parent = element.parentNode;
         if (!parent) continue;
 
+        const fragment = document.createDocumentFragment();
         while (element.firstChild) {
-          parent.insertBefore(element.firstChild, element);
+          fragment.appendChild(element.firstChild);
         }
-        element.remove();
+        parent.replaceChild(fragment, element);
       } else {
         element.remove();
       }
@@ -1232,7 +1232,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     }
 
     /* 范围内的总文本长度大于已覆盖的长度 → 存在间隙 */
-    const totalText = this._adapter_getText(minPos, maxPos);
+    const totalText = this.getText(minPos, maxPos);
     return getUnicodeStringLength(totalText) > coveredLength;
   }
 
@@ -1316,19 +1316,14 @@ export class DOMRangeAdapter implements IRangeAdapter {
       const parent = el.parentNode;
       if (!parent) continue;
 
+      const fragment = document.createDocumentFragment();
       while (el.firstChild) {
-        parent.insertBefore(el.firstChild, el);
+        fragment.appendChild(el.firstChild);
       }
-      el.remove();
+      parent.replaceChild(fragment, el);
     }
 
     this._container.normalize();
-  }
-
-  /** 内部使用的 getText（避免通过公共接口时产生副作用） */
-  private _adapter_getText(start: number, end: number): string {
-    const range = this.createDOMRange(start, end);
-    return range ? range.toString() : '';
   }
 
   /**
@@ -1343,20 +1338,17 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const temp = document.createElement('div');
     temp.innerHTML = html;
 
-    for (const config of Object.values(CONTAINER_CONFIGS)) {
-      if (config.copyable !== false) continue;
-
-      const selector = configToSelector(config);
+    const selector = getNonCopyableSelector();
+    if (selector) {
       const elements = temp.querySelectorAll(selector);
-
       for (const el of elements) {
-        /* 解包：将子节点提升到父级，移除容器包裹标签 */
         const parent = el.parentNode;
         if (!parent) continue;
+        const fragment = document.createDocumentFragment();
         while (el.firstChild) {
-          parent.insertBefore(el.firstChild, el);
+          fragment.appendChild(el.firstChild);
         }
-        el.remove();
+        parent.replaceChild(fragment, el);
       }
     }
 
