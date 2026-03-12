@@ -412,9 +412,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 计算元素在容器中的文本位置范围
-   * @param element DOM 元素
-   * @returns { start, end } 或 null（如果无法计算）
+   * 计算元素在容器中的文本位置（DOM Range 方式，支持无文本内容的元素如 <br>）
    */
   private getElementPosition(element: Element): { start: number; end: number } | null {
     return getElementPositionShared(element, this._container);
@@ -429,9 +427,13 @@ export class DOMRangeAdapter implements IRangeAdapter {
   getBlockElementsInRange(start: number, end: number): Element[] {
     const blockElements: Element[] = [];
     const allElements = this._container.querySelectorAll(BLOCK_SELECTOR);
+    const index = this._buildTextNodeIndex();
 
     for (const elem of allElements) {
-      const pos = this.getElementPosition(elem);
+      /* BR 等无文本内容元素需要 DOM Range 方式计算位置 */
+      const pos = elem.tagName.toLowerCase() === 'br'
+        ? this.getElementPosition(elem)
+        : this._getPositionFromIndex(elem, index);
       if (!pos) continue;
 
       if (elem.tagName.toLowerCase() === 'br') {
@@ -457,6 +459,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
    */
   private applyStyleAcrossBlocks(start: number, end: number, config: ContainerTagConfig): void {
     const snapshot = this.getTextNodesWithPositions(this._container);
+    const index = this._buildTextNodeIndex();
 
     for (const { node, nodeStart, nodeEnd } of snapshot) {
       /* 检查此文本节点是否在范围内 */
@@ -496,7 +499,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
         if (outermostStyleParent) {
           const parent = outermostStyleParent.parentNode;
           if (parent) {
-            const pos = this.getElementPosition(outermostStyleParent);
+            const pos = this._getPositionFromIndex(outermostStyleParent, index);
             if (pos && start <= pos.start && end >= pos.end) {
               const nextSibling = outermostStyleParent.nextSibling;
               parent.removeChild(outermostStyleParent);
@@ -568,6 +571,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     if (mode === 'wrap') {
       /* wrap 模式：检查是否有完全包含的已有容器，整体包裹优于逐段 extract */
       const allContainerElements = this._container.querySelectorAll(buildContainerSelector());
+      const wrapIndex = this._buildTextNodeIndex();
 
       const fullyContainedElements: Element[] = [];
       let coveredStart = Infinity;
@@ -577,7 +581,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
         /* 跳过与新元素同类型的容器（normalize 会合并冗余嵌套） */
         if (isSameContainerType(elem, newElement)) continue;
 
-        const pos = this.getElementPosition(elem);
+        const pos = this._getPositionFromIndex(elem, wrapIndex);
         if (!pos || !(pos.start < end && pos.end > start)) continue;
 
         if (start <= pos.start && end >= pos.end) {
@@ -687,12 +691,13 @@ export class DOMRangeAdapter implements IRangeAdapter {
     }
 
     const allTagElements = this._container.querySelectorAll(selector);
+    const index = this._buildTextNodeIndex();
 
     for (const element of allTagElements) {
       if (!this._container.contains(element)) continue;
       if (style && !isSupportedStyleElement(element, style)) continue;
 
-      const pos = this.getElementPosition(element);
+      const pos = this._getPositionFromIndex(element, index);
       if (!pos) continue;
 
       if (pos.start < end && pos.end > start) {
@@ -940,6 +945,45 @@ export class DOMRangeAdapter implements IRangeAdapter {
     return result;
   }
 
+  /**
+   * 构建容器内所有文本节点的位置索引
+   *
+   * 一次 TreeWalker 遍历 O(T)，后续每个元素的位置查询通过 Map 查找 O(1)，
+   * 替代 getElementPosition 每次调用创建 2 个 DOM Range 的 O(R) 开销。
+   * 索引在函数调用结束后自动 GC，不存在缓存失效风险。
+   */
+  private _buildTextNodeIndex(): Map<Text, { start: number; end: number }> {
+    const index = new Map<Text, { start: number; end: number }>();
+    let pos = 0;
+    const walker = document.createTreeWalker(this._container, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (!(node instanceof Text)) continue;
+      const len = getUnicodeStringLength(node.textContent || '');
+      if (len > 0) index.set(node, { start: pos, end: pos + len });
+      pos += len;
+    }
+    return index;
+  }
+
+  /**
+   * 从文本节点索引计算元素位置（替代 getElementPosition，零 DOM Range 创建）
+   */
+  private _getPositionFromIndex(
+    element: Element,
+    index: Map<Text, { start: number; end: number }>,
+  ): { start: number; end: number } | null {
+    let min = Infinity, max = 0;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (!(node instanceof Text)) continue;
+      const p = index.get(node);
+      if (p) { min = Math.min(min, p.start); max = Math.max(max, p.end); }
+    }
+    return min === Infinity ? null : { start: min, end: max };
+  }
+
   normalize(start: number, end: number): void {
     const selector = buildContainerSelector();
 
@@ -997,11 +1041,13 @@ export class DOMRangeAdapter implements IRangeAdapter {
   private mergeAdjacentSameTags(start: number, end: number, selector: string): void {
     const allElements = this._container.querySelectorAll(selector);
     const processedTags = new Set<Element>();
+    /** 一次遍历构建位置索引，替代每个元素都创建 DOM Range */
+    const index = this._buildTextNodeIndex();
 
     for (const element of allElements) {
       if (processedTags.has(element)) continue;
 
-      const pos = this.getElementPosition(element);
+      const pos = this._getPositionFromIndex(element, index);
       if (!pos) continue;
 
       /* 只处理与操作范围有交集的标签 */
@@ -1108,10 +1154,11 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const result = new Set<string>();
     const selector = buildStyleSelector();
     const tagToConfig = buildTagToConfigName();
+    const index = this._buildTextNodeIndex();
 
     const elements = this._container.querySelectorAll(selector);
     for (const element of elements) {
-      const pos = this.getElementPosition(element);
+      const pos = this._getPositionFromIndex(element, index);
       if (pos && pos.start < end && pos.end > start) {
         const configName = tagToConfig.get(element.tagName.toLowerCase());
         if (configName) {
@@ -1241,11 +1288,13 @@ export class DOMRangeAdapter implements IRangeAdapter {
   private _hasGaps(elements: Element[]): boolean {
     if (elements.length < 2) return false;
 
+    const index = this._buildTextNodeIndex();
+
     /* 计算所有元素的逻辑范围 */
     let minPos = Infinity;
     let maxPos = 0;
     for (const element of elements) {
-      const pos = this.getElementPosition(element);
+      const pos = this._getPositionFromIndex(element, index);
       if (!pos) continue;
       minPos = Math.min(minPos, pos.start);
       maxPos = Math.max(maxPos, pos.end);
@@ -1269,10 +1318,11 @@ export class DOMRangeAdapter implements IRangeAdapter {
    */
   private _fillGaps(elements: Element[], config: ContainerTagConfig, id: string): void {
     /* 计算逻辑范围 */
+    const index = this._buildTextNodeIndex();
     let minPos = Infinity;
     let maxPos = 0;
     for (const element of elements) {
-      const pos = this.getElementPosition(element);
+      const pos = this._getPositionFromIndex(element, index);
       if (!pos) continue;
       minPos = Math.min(minPos, pos.start);
       maxPos = Math.max(maxPos, pos.end);
