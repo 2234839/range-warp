@@ -88,7 +88,8 @@ export class Editor {
     if (matches.length === 0) return 0;
 
     // 从后往前替换，避免位置偏移
-    for (const { start, end } of [...matches].reverse()) {
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const { start, end } = matches[i];
       const range = this.createRange(start, end);
 
       if (asRevision) {
