@@ -9,24 +9,10 @@ import { ref, shallowRef } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { Editor, DOMRangeAdapter } from '../core/index';
 import type { Editor as EditorType } from '../core/index';
-import type { EditorComposable, SelectionContext } from './editor-utils';
+import type { BaseEditorOptions, EditorComposable, SelectionContext } from './editor-utils';
 
-/** composable 参数 */
-interface UseNativeEditorOptions {
-  /** contenteditable 容器 ref */
-  containerRef: { value: HTMLElement | null };
-  /** 当前用户名 */
-  currentUser: string;
-  /** 内容变化回调 */
-  onContentChange?: (html: string) => void;
-  /** 编辑器获得焦点 */
-  onFocus?: () => void;
-  /** 编辑器失去焦点 */
-  onBlur?: () => void;
-  /** 选区变化 */
-  onSelectionChange?: () => void;
-  /** 复制/剪切事件 */
-  onCopyCut?: (event: ClipboardEvent) => void;
+/** composable 参数（原生模式特有 onInput） */
+interface UseNativeEditorOptions extends BaseEditorOptions {
   /** 输入事件 */
   onInput?: () => void;
 }
@@ -72,12 +58,13 @@ export function useNativeEditor(options: UseNativeEditorOptions): EditorComposab
       editor.value.setHTML(initialContent);
     }
 
-    useEventListener(container, 'focus', onFocus);
-    useEventListener(container, 'blur', onBlur);
-    useEventListener(document, 'selectionchange', onSelectionChange);
-    useEventListener(container, 'copy', onCopyCut);
-    useEventListener(container, 'cut', onCopyCut);
-
+    if (onFocus) useEventListener(container, 'focus', onFocus);
+    if (onBlur) useEventListener(container, 'blur', onBlur);
+    if (onSelectionChange) useEventListener(document, 'selectionchange', onSelectionChange);
+    if (onCopyCut) {
+      useEventListener(container, 'copy', onCopyCut);
+      useEventListener(container, 'cut', onCopyCut);
+    }
     if (onInput) {
       useEventListener(container, 'input', onInput);
     }

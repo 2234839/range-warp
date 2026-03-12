@@ -128,5 +128,3 @@ export class Range {
     return `Range(${this.start}, ${this.end})`;
   }
 }
-
-export default Range;

@@ -295,5 +295,3 @@ export class Revision {
     return result;
   }
 }
-
-export default Revision;

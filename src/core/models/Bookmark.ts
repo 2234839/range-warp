@@ -34,7 +34,7 @@ export interface BookmarkOptions {
 }
 
 /** 书签元素类名 */
-export const BOOKMARK_CLASS = 'bookmark';
+const BOOKMARK_CLASS = 'bookmark';
 
 export class Bookmark {
   /** 书签元数据 */
@@ -184,7 +184,7 @@ export class Bookmark {
    * @returns 书签数组
    */
   static findByName(name: string, adapter: IRangeAdapter): Bookmark[] {
-    const escapedName = name.replace(/"/g, '\\"');
+    const escapedName = name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const elements = adapter.querySelectorAll(`[data-bookmark-name="${escapedName}"]`);
     const bookmarks: Bookmark[] = [];
 
@@ -198,5 +198,3 @@ export class Bookmark {
     return bookmarks;
   }
 }
-
-export default Bookmark;

@@ -301,5 +301,3 @@ export class Editor {
     this.refresh();
   }
 }
-
-export default Editor;

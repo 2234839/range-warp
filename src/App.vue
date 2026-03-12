@@ -168,7 +168,8 @@
 
   /** 比较并创建修订 */
   function compareAndCreateRevisions() {
-    if (!editor.value || !hasSelection.value) return;
+    const ed = editor.value;
+    if (!ed || !hasSelection.value) return;
     if (!comparisonText.value.trim()) return;
 
     const originalText = selectedOriginalText.value;
@@ -197,7 +198,6 @@
     for (const { type, text, position } of [...operations].reverse()) {
 
       if (type === diff.EQUAL) {
-        // 相同部分，无需处理
         continue;
       }
 
@@ -205,19 +205,19 @@
 
       if (type === diff.INSERT) {
         // 插入操作：使用 Range 的 insertText
-        const range = editor.value!.createRange(position, position);
+        const range = ed.createRange(position, position);
         range.insertText(text);
         // 创建插入修订
-        const newRange = editor.value!.createRange(position, endPos);
-        editor.value!.revisions.createInsert({
+        const newRange = ed.createRange(position, endPos);
+        ed.revisions.createInsert({
           range: newRange,
           author: 'current-user',
           comment: '通过对比生成的插入修订',
         });
       } else if (type === diff.DELETE) {
         // 删除操作：创建删除修订
-        const range = editor.value!.createRange(position, endPos);
-        editor.value!.revisions.createDelete({
+        const range = ed.createRange(position, endPos);
+        ed.revisions.createDelete({
           range,
           author: 'current-user',
           comment: '通过对比生成的删除修订',

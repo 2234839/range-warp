@@ -9,25 +9,10 @@ import { ref, shallowRef, nextTick } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { Editor, DOMRangeAdapter } from '../core/index';
 import type { Editor as EditorType } from '../core/index';
-import type { EditorComposable, SelectionContext } from './editor-utils';
+import type { BaseEditorOptions, EditorComposable, SelectionContext } from './editor-utils';
 
-/** composable 参数 */
-interface UseUEditorPlusOptions {
-  /** UEditor Plus 容器 ref */
-  containerRef: { value: HTMLElement | null };
-  /** 当前用户名 */
-  currentUser: string;
-  /** 内容变化回调 */
-  onContentChange?: (html: string) => void;
-  /** 编辑器获得焦点 */
-  onFocus?: () => void;
-  /** 编辑器失去焦点 */
-  onBlur?: () => void;
-  /** iframe 内选区变化 */
-  onSelectionChange?: () => void;
-  /** 复制/剪切事件 */
-  onCopyCut?: (event: ClipboardEvent) => void;
-}
+/** composable 参数（UEditor Plus 无额外选项） */
+interface UseUEditorPlusOptions extends BaseEditorOptions {}
 
 /** UEditor Plus 静态资源基址 */
 const UE_BASE = '/UEditorPlus';
@@ -109,7 +94,7 @@ export function useUEditorPlus(options: UseUEditorPlusOptions): EditorComposable
     const containerId = 'ue-plus-' + Date.now();
     const target = document.createElement('script');
     target.id = containerId;
-    (target as HTMLScriptElement).type = 'text/plain';
+    target.type = 'text/plain';
     target.style.display = 'none';
     container.appendChild(target);
 

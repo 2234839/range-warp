@@ -1,12 +1,13 @@
 <script setup lang="ts">
   import { ref, onMounted, onBeforeUnmount, useTemplateRef, readonly } from 'vue';
   import { useNativeEditor } from './useNativeEditor';
-  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition } from './editor-utils';
+  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition, TOOLBAR_BUTTONS, type FormatState } from './editor-utils';
 
   const editDiv = useTemplateRef('editDiv');
 
+
   /** 当前选中的文本格式状态 */
-  const formatState = ref({ ...EMPTY_FORMAT_STATE });
+  const formatState = ref<FormatState>(EMPTY_FORMAT_STATE);
 
   /** 当前选中的文本范围 */
   const selectedRange = ref({
@@ -81,7 +82,7 @@
 
     const pos = getSelectionPosition(container, ownerWindow);
     if (!pos || pos.start === pos.end) {
-      formatState.value = { ...EMPTY_FORMAT_STATE };
+      formatState.value = EMPTY_FORMAT_STATE;
       return;
     }
 
@@ -125,72 +126,23 @@
   <div class="border border-gray-300 rounded-lg overflow-hidden font-sans bg-white shadow-sm">
     <!-- 工具栏 -->
     <div class="flex items-center p-2 bg-gray-50 border-b border-gray-200 gap-1">
-      <!-- 格式化按钮组 -->
-      <button
-        @click="applyFormat('bold')"
-        :class="[
-          'p-2 border rounded text-sm font-bold min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.bold
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="加粗">
-        <strong>B</strong>
-      </button>
+      <template v-for="btn in TOOLBAR_BUTTONS" :key="btn.style">
+        <div v-if="btn.divider" class="w-px h-6 bg-gray-300 mx-1"></div>
+        <button
+          @click="applyFormat(btn.style)"
+          :class="[
+            'p-2 border rounded text-sm min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
+            btn.iconClass,
+            formatState[STYLE_KEYS[btn.style]]
+              ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
+              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
+          ]"
+          :title="btn.title">
+          <component :is="btn.wrapTag" v-if="btn.wrapTag">{{ btn.label }}</component>
+          <span v-else class="px-1 bg-yellow-200 rounded text-xs font-bold">{{ btn.label }}</span>
+        </button>
+      </template>
 
-      <button
-        @click="applyFormat('italic')"
-        :class="[
-          'p-2 border rounded text-sm italic min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.italic
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="斜体">
-        <em>I</em>
-      </button>
-
-      <button
-        @click="applyFormat('underline')"
-        :class="[
-          'p-2 border rounded text-sm underline min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.underline
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="下划线">
-        <u>U</u>
-      </button>
-
-      <button
-        @click="applyFormat('strikethrough')"
-        :class="[
-          'p-2 border rounded text-sm line-through min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.strikethrough
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="删除线">
-        <s>S</s>
-      </button>
-
-      <!-- 分隔线 -->
-      <div class="w-px h-6 bg-gray-300 mx-1"></div>
-
-      <!-- 高亮按钮 -->
-      <button
-        @click="applyFormat('highlight')"
-        :class="[
-          'p-2 border rounded text-sm min-w-[32px] h-8 flex items-center justify-center transition-all duration-200',
-          formatState.highlight
-            ? 'bg-blue-500 text-white border-blue-600 hover:bg-blue-600'
-            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400',
-        ]"
-        title="高亮">
-        <span class="px-1 bg-yellow-200 rounded text-xs font-bold">H</span>
-      </button>
-
-      <!-- 分隔线 -->
       <div class="w-px h-6 bg-gray-300 mx-1"></div>
 
       <!-- 功能按钮 -->

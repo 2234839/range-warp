@@ -441,5 +441,3 @@ export class RevisionService {
   }
 
 }
-
-export default RevisionService;

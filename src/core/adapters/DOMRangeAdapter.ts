@@ -13,9 +13,6 @@
 import type { IRangeAdapter, WrapOptions, ContainerTagConfig } from './IRangeAdapter';
 import { getElementPosition, getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils';
 
-/** @deprecated 使用 IRangeAdapter 中的 ContainerTagConfig 类型 */
-export type { ContainerTagConfig } from './IRangeAdapter';
-
 /** 容器到标签的映射配置（支持动态注册） */
 const CONTAINER_CONFIGS: Record<string, ContainerTagConfig> = {
   bold: { tagName: 'strong', display: 'inline' },
@@ -383,10 +380,6 @@ export class DOMRangeAdapter implements IRangeAdapter {
     return range;
   }
 
-  /**
-   * 获取包含换行符的文本内容
-   * @returns 文本内容
-   */
   // ==================== IRangeAdapter 接口实现 ====================
 
   getText(start: number, end: number): string {
@@ -861,13 +854,6 @@ export class DOMRangeAdapter implements IRangeAdapter {
     return fragment;
   }
 
-  /**
-   * 在元素内创建 Range
-   * @param element 元素
-   * @param start 起始偏移
-   * @param end 结束偏移
-   * @returns Range 或 null
-   */
   /**
    * 处理元素以移除部分样式，保留内部样式
    * @param element 要处理的元素

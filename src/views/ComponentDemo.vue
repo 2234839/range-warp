@@ -12,18 +12,17 @@
 
   /** 处理按钮点击事件 */
   const handleButtonClick = (message: string) => {
-    console.log('按钮点击:', message);
     alert(`点击了: ${message}`);
   };
 
   /** 处理输入事件 */
-  const handleInput = (value: string | number, type: string) => {
-    console.log(`${type}输入:`, value);
+  const handleInput = (_value: string | number, _type: string) => {
+    /** 演示回调 */
   };
 
   /** 处理清除事件 */
   const handleClear = () => {
-    console.log('输入框已清除');
+    /** 演示回调 */
   };
 </script>
 

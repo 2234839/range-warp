@@ -1,37 +1,11 @@
 <script setup lang="ts">
   import { ref, computed, onMounted, onBeforeUnmount, useTemplateRef } from 'vue';
   import { useDebounceFn } from '@vueuse/core';
-  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition, type EditorComposable } from './editor-utils';
+  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition, getFormattingAncestors, wrapWithMissingFormatting, TOOLBAR_BUTTONS, type FormatState, type EditorComposable } from './editor-utils';
   import { useUEditorPlus } from './useUEditorPlus';
   import { useNativeEditor } from './useNativeEditor';
+  import { getNonCopyableSelector } from '../core/adapters/DOMRangeAdapter';
 
-  /** 重置格式状态时复用同一个对象（避免每次 spread 创建新对象） */
-  const CLEARED_FORMAT_STATE = { ...EMPTY_FORMAT_STATE };
-
-  /** 工具栏按钮配置 */
-  interface ToolbarButtonConfig {
-    /** 样式名称 */
-    style: string;
-    /** 按钮标题 */
-    title: string;
-    /** 按钮显示的图标标签，如 'B'、'I' */
-    label: string;
-    /** 图标额外 CSS 类（如 font-bold、italic） */
-    iconClass: string;
-    /** 是否使用包裹标签（如 strong、em、u、s） */
-    wrapTag?: string;
-    /** 分隔线（在此按钮前插入分隔线） */
-    divider?: boolean;
-  }
-
-  /** 工具栏按钮列表 */
-  const toolbarButtons: ToolbarButtonConfig[] = [
-    { style: 'bold', title: '加粗', label: 'B', iconClass: 'font-bold', wrapTag: 'strong' },
-    { style: 'italic', title: '斜体', label: 'I', iconClass: 'italic', wrapTag: 'em' },
-    { style: 'underline', title: '下划线', label: 'U', iconClass: 'underline', wrapTag: 'u' },
-    { style: 'strikethrough', title: '删除线', label: 'S', iconClass: 'line-through', wrapTag: 's' },
-    { style: 'highlight', title: '高亮', label: 'H', iconClass: '', divider: true },
-  ];
 
   /** 组件属性 */
   interface Props {
@@ -92,7 +66,7 @@
   const isEditorFocused = ref(false);
 
   /** 格式状态 */
-  const formatState = ref({ ...EMPTY_FORMAT_STATE });
+  const formatState = ref<FormatState>(EMPTY_FORMAT_STATE);
 
   /** 是否为 UEditor Plus 模式 */
   const isUEditorMode = computed(() => props.mode === 'ueditor-plus');
@@ -164,7 +138,7 @@
       persistentSelection.value = null;
       currentSelection.value = { start: 0, end: 0, text: '' };
       CSS.highlights?.delete('editor-selection');
-      formatState.value = CLEARED_FORMAT_STATE;
+      formatState.value = EMPTY_FORMAT_STATE;
       emit('selectionChange', 0, 0, '');
       return;
     }
@@ -213,6 +187,14 @@
 
   /**
    * 拦截复制/剪切事件，清洗剪贴板 HTML
+   *
+   * 1. 从选区提取 HTML 片段
+   * 2. 清洗不可复制容器（书签、修订等），保留文本和内联样式
+   * 3. 恢复 cloneContents 丢失的格式化祖先上下文（如 em、strong）
+   * 4. 写入剪贴板
+   *
+   * 参考 ProseMirror / Quill / Slate 等主流编辑器均始终拦截复制事件，
+   * 通过 clipboardData.setData 写入清洗后的 HTML，不放行给浏览器原生处理
    */
   function handleCopyCut(event: ClipboardEvent) {
     if (!activeEditor.value) return;
@@ -226,12 +208,20 @@
 
     event.preventDefault();
 
+    /** 从选区提取 HTML 片段 */
     const fragment = range.cloneContents();
     const wrapper = ownerWindow.document.createElement('div');
     wrapper.appendChild(fragment);
 
     /** 清洗不可复制容器，保留文本和内联样式 */
-    const html = activeEditor.value.sanitizeHTML(wrapper.innerHTML);
+    let html = activeEditor.value.sanitizeHTML(wrapper.innerHTML);
+
+    /** 恢复 cloneContents 丢失的格式化祖先（加粗、斜体等） */
+    const nonCopyableSelector = getNonCopyableSelector();
+    const ancestors = getFormattingAncestors(range, container, nonCopyableSelector);
+    if (ancestors.length > 0) {
+      html = wrapWithMissingFormatting(html, ancestors);
+    }
 
     event.clipboardData?.setData('text/html', html);
     event.clipboardData?.setData('text/plain', selection.toString());
@@ -253,7 +243,7 @@
 
     const { start, end } = currentSelection.value;
     if (start === end) {
-      formatState.value = CLEARED_FORMAT_STATE;
+      formatState.value = EMPTY_FORMAT_STATE;
       return;
     }
 
@@ -348,7 +338,7 @@
 
       <div class="w-px h-6 bg-gray-300 mx-1"></div>
 
-      <template v-for="btn in toolbarButtons" :key="btn.style">
+      <template v-for="btn in TOOLBAR_BUTTONS" :key="btn.style">
         <div v-if="btn.divider" class="w-px h-6 bg-gray-300 mx-1"></div>
         <button
           @click="toggleStyle(btn.style)"
