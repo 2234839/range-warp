@@ -215,6 +215,17 @@ function wrapRangeContents(range: globalThis.Range, wrapper: Element): void {
   range.insertNode(wrapper);
 }
 
+/** 解包元素：将元素的子节点提升到父级（替代元素自身） */
+function unwrapChildNodes(element: Element): void {
+  const parent = element.parentNode;
+  if (!parent) return;
+  const fragment = document.createDocumentFragment();
+  while (element.firstChild) {
+    fragment.appendChild(element.firstChild);
+  }
+  parent.replaceChild(fragment, element);
+}
+
 /** 获取所有样式标签名集合（不含 attributeSelector 的配置） */
 export function getStyleTagNames(): Set<string> {
   return new Set(buildTagToConfigName().keys());
@@ -703,14 +714,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
       if (pos.start < end && pos.end > start) {
         if (start <= pos.start && end >= pos.end) {
           /* 完全包含：移除标签但保留子元素 */
-          const parent = element.parentNode;
-          if (parent) {
-            const fragment = document.createDocumentFragment();
-            while (element.firstChild) {
-              fragment.appendChild(element.firstChild);
-            }
-            parent.replaceChild(fragment, element);
-          }
+          unwrapChildNodes(element);
         } else {
           this.splitElement(element, pos.start, start, end);
         }
@@ -999,7 +1003,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
       const parent = element.parentElement;
       if (parent && isSupportedStyleElement(parent) &&
           isSameContainerType(element, parent)) {
-        this.mergeRedundantTags(element, parent);
+        this.mergeRedundantTags(element);
         continue;
       }
 
@@ -1021,12 +1025,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * @param child 子标签
    * @param parent 父标签
    */
-  private mergeRedundantTags(child: Element, parent: Element): void {
-    const fragment = document.createDocumentFragment();
-    while (child.firstChild) {
-      fragment.appendChild(child.firstChild);
-    }
-    parent.replaceChild(fragment, child);
+  private mergeRedundantTags(child: Element): void {
+    unwrapChildNodes(child);
   }
 
   /**
@@ -1175,14 +1175,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     for (const element of elements) {
       if (keepChildren) {
-        const parent = element.parentNode;
-        if (!parent) continue;
-
-        const fragment = document.createDocumentFragment();
-        while (element.firstChild) {
-          fragment.appendChild(element.firstChild);
-        }
-        parent.replaceChild(fragment, element);
+        unwrapChildNodes(element);
       } else {
         element.remove();
       }
@@ -1283,24 +1276,28 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
+   * 计算同组元素的逻辑范围（min/max 字符位置）
+   */
+  private _getGroupBounds(elements: Element[]): { min: number; max: number } | null {
+    const index = this._buildTextNodeIndex();
+    let min = Infinity, max = 0;
+    for (const element of elements) {
+      const pos = this._getPositionFromIndex(element, index);
+      if (!pos) continue;
+      min = Math.min(min, pos.start);
+      max = Math.max(max, pos.end);
+    }
+    return min === Infinity ? null : { min, max };
+  }
+
+  /**
    * 检测同组元素之间是否存在文本间隙
    */
   private _hasGaps(elements: Element[]): boolean {
     if (elements.length < 2) return false;
 
-    const index = this._buildTextNodeIndex();
-
-    /* 计算所有元素的逻辑范围 */
-    let minPos = Infinity;
-    let maxPos = 0;
-    for (const element of elements) {
-      const pos = this._getPositionFromIndex(element, index);
-      if (!pos) continue;
-      minPos = Math.min(minPos, pos.start);
-      maxPos = Math.max(maxPos, pos.end);
-    }
-
-    if (minPos === Infinity) return false;
+    const bounds = this._getGroupBounds(elements);
+    if (!bounds) return false;
 
     /* 计算元素覆盖的总文本长度 */
     let coveredLength = 0;
@@ -1309,7 +1306,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     }
 
     /* 范围内的总文本长度大于已覆盖的长度 → 存在间隙 */
-    const totalText = this.getText(minPos, maxPos);
+    const totalText = this.getText(bounds.min, bounds.max);
     return getUnicodeStringLength(totalText) > coveredLength;
   }
 
@@ -1317,18 +1314,11 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * 填充间隙：将逻辑范围内未包裹的文本节点包裹为同类型元素
    */
   private _fillGaps(elements: Element[], config: ContainerTagConfig, id: string): void {
-    /* 计算逻辑范围 */
-    const index = this._buildTextNodeIndex();
-    let minPos = Infinity;
-    let maxPos = 0;
-    for (const element of elements) {
-      const pos = this._getPositionFromIndex(element, index);
-      if (!pos) continue;
-      minPos = Math.min(minPos, pos.start);
-      maxPos = Math.max(maxPos, pos.end);
-    }
+    const bounds = this._getGroupBounds(elements);
+    if (!bounds || bounds.min >= bounds.max) return;
 
-    if (minPos === Infinity || minPos >= maxPos) return;
+    const minPos = bounds.min;
+    const maxPos = bounds.max;
 
     const snapshot = this.getTextNodesWithPositions(this._container);
     const idAttr = config.idAttribute!;
@@ -1391,14 +1381,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     /* 保留最大的，移除其余 */
     for (const el of sorted.slice(1)) {
-      const parent = el.parentNode;
-      if (!parent) continue;
-
-      const fragment = document.createDocumentFragment();
-      while (el.firstChild) {
-        fragment.appendChild(el.firstChild);
-      }
-      parent.replaceChild(fragment, el);
+      unwrapChildNodes(el);
     }
 
     this._container.normalize();
@@ -1420,13 +1403,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     if (selector) {
       const elements = temp.querySelectorAll(selector);
       for (const el of elements) {
-        const parent = el.parentNode;
-        if (!parent) continue;
-        const fragment = document.createDocumentFragment();
-        while (el.firstChild) {
-          fragment.appendChild(el.firstChild);
-        }
-        parent.replaceChild(fragment, el);
+        unwrapChildNodes(el);
       }
     }
 

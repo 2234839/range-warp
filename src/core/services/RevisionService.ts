@@ -15,26 +15,17 @@ import { Revision, RevisionType, type RevisionMetadata } from '../models/Revisio
 import { generateId } from '../utils';
 
 /** 注册修订容器配置（使适配器能识别修订元素） */
-registerContainerConfig('revision-insert', {
+const REVISION_CONFIG = {
   tagName: 'span',
-  attributeSelector: '.revision-insert',
-  display: 'inline',
-  crossBlock: 'split',
+  display: 'inline' as const,
+  crossBlock: 'split' as const,
   idAttribute: 'data-revision-id',
-  splitRepair: 'none',
+  splitRepair: 'none' as const,
   copyable: false,
   mergeAdjacent: true,
-});
-registerContainerConfig('revision-delete', {
-  tagName: 'span',
-  attributeSelector: '.revision-delete',
-  display: 'inline',
-  crossBlock: 'split',
-  idAttribute: 'data-revision-id',
-  splitRepair: 'none',
-  copyable: false,
-  mergeAdjacent: true,
-});
+};
+registerContainerConfig('revision-insert', { ...REVISION_CONFIG, attributeSelector: '.revision-insert' });
+registerContainerConfig('revision-delete', { ...REVISION_CONFIG, attributeSelector: '.revision-delete' });
 
 export interface CreateRevisionOptions {
   /** 修订类型 */

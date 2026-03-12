@@ -30,9 +30,7 @@
   }, 500);
 
   /** 保存状态文本 */
-  const saveStatusText = computed(() => {
-    return saveStatus.value === 'saved' ? '已保存' : '';
-  });
+  const saveStatusText = computed(() => saveStatus.value === 'saved' ? '已保存' : '');
 
   /** 触发保存 */
   const triggerSave = () => debouncedSave();
