@@ -41,10 +41,14 @@ export const STYLE_KEYS: Record<string, keyof FormatState> = {
  * 通过 preRange 计算选区起始位置，加上选区文本长度得到结束位置
  *
  * @param container 编辑器容器元素
+ * @param ownerWindow 容器所属的 window 对象（iframe 场景传入 iframe.contentWindow）
  * @returns { start, end } 或 null（无有效选区时）
  */
-export function getSelectionPosition(container: HTMLElement): { start: number; end: number } | null {
-  const selection = window.getSelection();
+export function getSelectionPosition(
+  container: HTMLElement,
+  ownerWindow: Window = window,
+): { start: number; end: number } | null {
+  const selection = ownerWindow.getSelection();
   if (!selection || selection.rangeCount === 0) return null;
 
   const range = selection.getRangeAt(0);

@@ -4,20 +4,38 @@
   import EditorCore from './components/EditorCore.vue';
   import DomTreePanel from './components/DomTreePanel.vue';
   import diff from 'fast-diff';
-  import { getUnicodeStringLength } from './core/utils';
+  import { getUnicodeStringLength, findElementByPath, getElementPosition } from './core/utils';
+
+  /** 编辑器模式 */
+  type EditorMode = 'native' | 'ueditor-plus';
+  const editorMode = useStorage<EditorMode>('range-warp-editor-mode', 'native', localStorage);
 
   /** EditorCore 组件引用 */
-  const editorRef = ref<InstanceType<typeof EditorCore> | null>(null);
+  const editorCoreRef = ref<InstanceType<typeof EditorCore> | null>(null);
 
   /** 编辑器内容 - 使用 localStorage 持久化 */
   const editorContent = useStorage<string>('range-warp-editor-content', '', localStorage);
 
+  /** 统一的 Editor 实例 */
+  const editor = computed(() => editorCoreRef.value?.editor ?? null);
+
   /**
-   * DOM 树节点点击 → 在编辑器中选中对应 range
+   * DOM 树节点点击 → 通过元素路径在编辑器中选中对应 range
    */
-  function handleTreeSelect(start: number, end: number) {
-    if (!editorRef.value?.editor) return;
-    editorRef.value.editor.createRange(start, end).select();
+  function handleTreeSelect(elementIndex: number) {
+    const ec = editorCoreRef.value;
+    if (!ec || !editor.value) return;
+
+    const container = ec.container;
+    if (!container) return;
+
+    const element = findElementByPath(container, elementIndex);
+    if (!element) return;
+
+    const pos = getElementPosition(element, container);
+    if (!pos) return;
+
+    editor.value.createRange(pos.start, pos.end).select();
   }
 
   /** 保存状态 */
@@ -45,14 +63,13 @@
     { key: 'revisions', label: '修订' },
   ];
 
-  /** 当前选中的文本范围 - 使用持久化选区（不受编辑器外部操作影响） */
-  const selectedRange = computed(() => editorRef.value?.persistentSelection || { start: 0, end: 0, text: '' });
+  /** 当前选中的文本范围 */
+  const selectedRange = computed(() => {
+    return editorCoreRef.value?.persistentSelection || { start: 0, end: 0, text: '' };
+  });
 
   /** 是否有选中文本 */
   const hasSelection = computed(() => selectedRange.value.start !== selectedRange.value.end);
-
-  /** 编辑器实例（便捷访问） */
-  const editor = computed(() => editorRef.value?.editor);
 
   /** 书签列表 */
   const bookmarks = ref<Array<{ id: string; name: string; createTime: number }>>([]);
@@ -242,6 +259,15 @@
     { immediate: true }
   );
 
+  /**
+   * UEditor Plus 就绪后，将内容同步到新编辑器
+   */
+  watch(() => editorCoreRef.value?.ready, (isReady) => {
+    if (isReady && editorContent.value) {
+      editorCoreRef.value?.setHTML(editorContent.value);
+    }
+  });
+
   /** 监听标签切换，刷新对应数据 */
   watch(activeTab, (newTab) => {
     if (!editor.value) return;
@@ -276,8 +302,11 @@
         </div>
 
         <!-- 中间：富文本编辑器 -->
-        <EditorCore ref="editorRef" :model-value="editorContent"
-          @update:model-value="(html) => { editorContent = html; triggerSave(); }" />
+        <div class="flex-1 min-w-0 flex flex-col gap-2">
+          <!-- 编辑器（:key 确保模式切换时重建组件） -->
+          <EditorCore :key="editorMode" ref="editorCoreRef" v-model:mode="editorMode" :model-value="editorContent"
+            @update:model-value="(html) => { editorContent = html; triggerSave(); }" />
+        </div>
 
         <!-- 右侧：信息面板 -->
         <div class="w-72 shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col min-h-0">

@@ -184,42 +184,6 @@ export class Revision {
   }
 
   /**
-   * 创建修订 DOM 元素
-   * @param metadata 修订元数据
-   * @returns DOM 元素
-   */
-  static createElement(metadata: RevisionMetadata): HTMLElement {
-    const span = document.createElement('span');
-    span.className = metadata.type === RevisionType.INSERT
-      ? REVISION_INSERT_CLASS
-      : REVISION_DELETE_CLASS;
-    this.setCommonAttributes(span, metadata);
-    return span;
-  }
-
-  /**
-   * 设置通用属性
-   * @param element DOM 元素
-   * @param metadata 修订元数据
-   */
-  private static setCommonAttributes(element: HTMLElement, metadata: RevisionMetadata): void {
-    element.setAttribute('data-revision-id', metadata.id);
-    element.setAttribute('data-revision-type', metadata.type);
-    element.setAttribute('data-revision-author', metadata.author);
-    element.setAttribute('data-revision-time', metadata.createTime.toString());
-
-    if (metadata.comment) {
-      element.setAttribute('data-revision-comment', metadata.comment);
-    }
-
-    if (metadata.customData) {
-      for (const [key, value] of Object.entries(metadata.customData)) {
-        element.setAttribute(`data-revision-${key}`, String(value));
-      }
-    }
-  }
-
-  /**
    * 从 DOM 元素创建修订对象
    * @param element DOM 元素
    * @param adapter 适配器实例

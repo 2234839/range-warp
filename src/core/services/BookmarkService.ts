@@ -9,21 +9,9 @@
  */
 
 import type { IRangeAdapter } from '../adapters/IRangeAdapter';
-import { registerContainerConfig } from '../adapters/DOMRangeAdapter.js';
 import { Range } from '../models/Range';
 import { Bookmark, type BookmarkMetadata } from '../models/Bookmark';
 import { generateId } from '../utils';
-
-/** 注册书签容器配置（使适配器能识别书签元素并支持跨块拆分） */
-registerContainerConfig('bookmark', {
-  tagName: 'span',
-  attributeSelector: '.bookmark',
-  display: 'inline',
-  crossBlock: 'split',
-  idAttribute: 'data-bookmark-id',
-  splitRepair: 'fill-gaps',
-  copyable: false,
-});
 
 export interface CreateBookmarkOptions {
   /** 书签名称 */
@@ -56,6 +44,15 @@ export class BookmarkService {
 
   constructor(adapter: IRangeAdapter) {
     this._adapter = adapter;
+    adapter.registerContainerConfig('bookmark', {
+      tagName: 'span',
+      attributeSelector: '.bookmark',
+      display: 'inline',
+      crossBlock: 'split',
+      idAttribute: 'data-bookmark-id',
+      splitRepair: 'fill-gaps',
+      copyable: false,
+    });
     this.refresh();
   }
 
@@ -75,7 +72,22 @@ export class BookmarkService {
       customData,
     };
 
-    range.wrapElement(() => Bookmark.createElement(metadata), { mode: 'wrap' });
+    /** 构建附加属性 */
+    const attrs: Record<string, string> = {
+      'data-bookmark-id': metadata.id,
+      'data-bookmark-name': metadata.name,
+      'data-bookmark-create-time': String(metadata.createTime),
+    };
+    if (metadata.author) {
+      attrs['data-bookmark-author'] = metadata.author;
+    }
+    if (metadata.customData) {
+      for (const [key, value] of Object.entries(metadata.customData)) {
+        attrs[`data-bookmark-${key}`] = String(value);
+      }
+    }
+
+    range.wrapElement(() => this._adapter.createConfigElement('bookmark', attrs), { mode: 'wrap' });
 
     const bookmark = new Bookmark({ metadata, adapter: this._adapter });
     this.refresh();

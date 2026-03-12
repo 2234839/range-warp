@@ -60,9 +60,10 @@ export function getUtf16Slice(str: string, start: number, end: number): string {
  */
 export function getElementPosition(element: Element, container: Element): { start: number; end: number } | null {
   try {
-    const elemRange = document.createRange();
+    const doc = element.ownerDocument;
+    const elemRange = doc.createRange();
     elemRange.selectNodeContents(element);
-    const preRange = document.createRange();
+    const preRange = doc.createRange();
     preRange.selectNodeContents(container);
     preRange.setEnd(elemRange.startContainer, elemRange.startOffset);
 
@@ -73,4 +74,20 @@ export function getElementPosition(element: Element, container: Element): { star
   } catch {
     return null;
   }
+}
+
+/**
+ * 根据 depth-first 遍历索引在容器中查找元素
+ * 兼容主文档和 iframe 文档场景
+ */
+export function findElementByPath(container: Element, targetIndex: number): Element | null {
+  let current = -1;
+  const doc = container.ownerDocument;
+  const walker = doc.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    current++;
+    if (current === targetIndex) return node as Element;
+  }
+  return null;
 }

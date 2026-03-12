@@ -264,4 +264,16 @@ export interface IRangeAdapter {
    */
   registerContainerConfig(name: string, config: ContainerTagConfig): void;
 
+  /**
+   * 根据已注册的容器配置创建元素
+   *
+   * 使用容器所属的 document 创建元素，自动设置 className 和附加属性。
+   * 兼容主文档和 iframe 文档场景。
+   *
+   * @param configName 容器配置名称（如 'bookmark', 'revision-insert'）
+   * @param attrs 附加属性键值对（如 data-bookmark-id, data-revision-author）
+   * @returns 新创建的元素
+   */
+  createConfigElement(configName: string, attrs?: Record<string, string>): Element;
+
 }

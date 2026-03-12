@@ -123,8 +123,19 @@ export class RevisionService {
    * 用于 create 和内部重建场景
    */
   private _wrapRevision(range: Range, metadata: RevisionMetadata): Revision {
-    const createElement = () => Revision.createElement(metadata);
-    range.wrapElement(createElement, { mode: 'wrap' });
+    /** 构建附加属性 */
+    const attrs: Record<string, string> = {
+      'data-revision-id': metadata.id,
+      'data-revision-type': metadata.type,
+      'data-revision-author': metadata.author,
+      'data-revision-time': String(metadata.createTime),
+    };
+    if (metadata.comment) {
+      attrs['data-revision-comment'] = metadata.comment;
+    }
+
+    const configName = metadata.type === 'insert' ? 'revision-insert' : 'revision-delete';
+    range.wrapElement(() => this._adapter.createConfigElement(configName, attrs), { mode: 'wrap' });
 
     return new Revision({ metadata, adapter: this._adapter });
   }

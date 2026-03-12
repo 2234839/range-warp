@@ -1,6 +1,5 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
-  import { getElementPosition } from '../core/utils';
 
   interface TreeNode {
     key: string;
@@ -24,8 +23,8 @@
   }
 
   interface Emits {
-    /** 点击节点，传递文档位置范围 */
-    select: [start: number, end: number];
+    /** 点击节点，传递元素在 depth-first 遍历中的索引 */
+    select: [elementIndex: number];
   }
 
   const props = defineProps<Props>();
@@ -168,41 +167,14 @@
   });
 
   /**
-   * 根据 path 在编辑器 live DOM 中查找对应元素
-   *
-   * path 是元素在 DOM 深度优先遍历中的全局索引
-   */
-  function findElementByPath(container: Element, targetIndex: number): Element | null {
-    let current = -1;
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, null);
-    let node;
-    while ((node = walker.nextNode())) {
-      if (node instanceof Element) {
-        current++;
-        if (current === targetIndex) return node;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * 点击树节点 → 在编辑器中选中对应 range
+   * 点击树节点 → 通知父组件选中对应元素
    */
   function handleClick(node: TreeNode) {
     activeKey.value = node.key;
 
     if (node.path[0] === -1) return;
 
-    const container = document.querySelector<HTMLElement>('[contenteditable]');
-    if (!container) return;
-
-    const element = findElementByPath(container, node.path[0]);
-    if (!element) return;
-
-    const pos = getElementPosition(element, container);
-    if (!pos) return;
-
-    emit('select', pos.start, pos.end);
+    emit('select', node.path[0]);
   }
 </script>
 

@@ -34,7 +34,7 @@ export interface BookmarkOptions {
 }
 
 /** 书签元素类名 */
-const BOOKMARK_CLASS = 'bookmark';
+export const BOOKMARK_CLASS = 'bookmark';
 
 export class Bookmark {
   /** 书签元数据 */
@@ -114,31 +114,6 @@ export class Bookmark {
   remove(): void {
     const selector = `[data-bookmark-id="${this.metadata.id}"]`;
     this._adapter.removeElementsBySelector(selector, true);
-  }
-
-  /**
-   * 创建书签 DOM 元素
-   * @param metadata 书签元数据
-   * @returns DOM 元素
-   */
-  static createElement(metadata: BookmarkMetadata): HTMLElement {
-    const span = document.createElement('span');
-    span.className = BOOKMARK_CLASS;
-    span.setAttribute('data-bookmark-id', metadata.id);
-    span.setAttribute('data-bookmark-name', metadata.name);
-    span.setAttribute('data-bookmark-create-time', metadata.createTime.toString());
-
-    if (metadata.author) {
-      span.setAttribute('data-bookmark-author', metadata.author);
-    }
-
-    if (metadata.customData) {
-      for (const [key, value] of Object.entries(metadata.customData)) {
-        span.setAttribute(`data-bookmark-${key}`, String(value));
-      }
-    }
-
-    return span;
   }
 
   /**
