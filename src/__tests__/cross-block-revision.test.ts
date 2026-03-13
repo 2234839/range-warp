@@ -73,8 +73,8 @@ test('1.1 跨块新增修订 - 块布局不破坏', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  /* 选中 "3" 和 "4" (位置 2-4) */
-  service.createInsert({ range: createRange(2, 4), author: 'test' });
+  /* 选中 "3" 和 "4" (位置 2-5, 跨虚拟 \n) */
+  service.createInsert({ range: createRange(2, 5), author: 'test' });
 
   const divs = container.querySelectorAll(':scope > div');
   return (
@@ -89,7 +89,7 @@ test('1.2 跨块新增修订 - 修订标记在块内', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  service.createInsert({ range: createRange(2, 4), author: 'test' });
+  service.createInsert({ range: createRange(2, 5), author: 'test' });
 
   const revisionSpans = container.querySelectorAll('.revision-insert');
   return (
@@ -112,7 +112,7 @@ test('1.3 跨块新增修订 - 无嵌套', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  service.createInsert({ range: createRange(2, 4), author: 'test' });
+  service.createInsert({ range: createRange(2, 5), author: 'test' });
 
   /* 检查修订 span 内没有嵌套的修订 span */
   const nested = container.querySelector('.revision-insert .revision-insert');
@@ -123,7 +123,7 @@ test('1.4 跨块新增修订 - 同一 revision ID', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  service.createInsert({ range: createRange(2, 4), author: 'test' });
+  service.createInsert({ range: createRange(2, 5), author: 'test' });
 
   const revisionSpans = container.querySelectorAll('.revision-insert');
   const ids = Array.from(revisionSpans).map(el => el.getAttribute('data-revision-id'));
@@ -141,7 +141,7 @@ test('2.1 跨块删除修订 - 块布局不破坏', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  service.createDelete({ range: createRange(2, 4), author: 'test' });
+  service.createDelete({ range: createRange(2, 5), author: 'test' });
 
   const divs = container.querySelectorAll(':scope > div');
   return (
@@ -156,7 +156,7 @@ test('2.2 跨块删除修订 - 标记在块内', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  service.createDelete({ range: createRange(2, 4), author: 'test' });
+  service.createDelete({ range: createRange(2, 5), author: 'test' });
 
   const revisionSpans = container.querySelectorAll('.revision-delete');
   return (
@@ -174,13 +174,13 @@ test('3.1 跨块修订 - getRange 合并范围', () => {
   const { service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  const revision = service.createInsert({ range: createRange(2, 4), author: 'test' });
+  const revision = service.createInsert({ range: createRange(2, 5), author: 'test' });
 
   const range = revision.getRange();
   return (
     assert(!!range, 'getRange 返回 null') &&
     assert(range!.start === 2, `start 应为2: ${range!.start}`) &&
-    assert(range!.end === 4, `end 应为4: ${range!.end}`)
+    assert(range!.end === 5, `end 应为5: ${range!.end}`)
   );
 });
 
@@ -188,11 +188,11 @@ test('3.2 跨块修订 - getText 合并内容', () => {
   const { service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  const revision = service.createInsert({ range: createRange(2, 4), author: 'test' });
+  const revision = service.createInsert({ range: createRange(2, 5), author: 'test' });
 
   return assert(
-    revision.getText() === '34',
-    `getText 应为 "34": "${revision.getText()}"`
+    revision.getText() === '3\n4',
+    `getText 应为 "3\\n4": "${revision.getText()}"`
   );
 });
 
@@ -204,7 +204,7 @@ test('4.1 跨块新增修订 accept - 标记全部移除', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  const revision = service.createInsert({ range: createRange(2, 4), author: 'test' });
+  const revision = service.createInsert({ range: createRange(2, 5), author: 'test' });
   service.accept(revision);
 
   return (
@@ -217,7 +217,7 @@ test('4.2 跨块删除修订 accept - 内容全部删除', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  const revision = service.createDelete({ range: createRange(2, 4), author: 'test' });
+  const revision = service.createDelete({ range: createRange(2, 5), author: 'test' });
   service.accept(revision);
 
   return (
@@ -234,7 +234,7 @@ test('5.1 跨块新增修订 reject - 内容全部删除', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  const revision = service.createInsert({ range: createRange(2, 4), author: 'test' });
+  const revision = service.createInsert({ range: createRange(2, 5), author: 'test' });
   service.reject(revision);
 
   return (
@@ -247,7 +247,7 @@ test('5.2 跨块删除修订 reject - 内容恢复', () => {
   const { container, service, createRange } = createEnv(
     '<div>123</div><div>456</div><div>789</div>'
   );
-  const revision = service.createDelete({ range: createRange(2, 4), author: 'test' });
+  const revision = service.createDelete({ range: createRange(2, 5), author: 'test' });
   service.reject(revision);
 
   return (
@@ -265,15 +265,15 @@ test('6.1 整块选中的新增修订', () => {
   const { container, service, createRange } = createEnv(
     '<div>12</div><div>34</div><div>56</div>'
   );
-  /* 选中全部 "123456" */
-  const revision = service.createInsert({ range: createRange(0, 6), author: 'test' });
+  /* 选中全部 "123456" (位置 0-8, 含虚拟 \n) */
+  const revision = service.createInsert({ range: createRange(0, 8), author: 'test' });
 
   const divs = container.querySelectorAll(':scope > div');
   const revisionSpans = container.querySelectorAll('.revision-insert');
   return (
     assert(divs.length === 3, `块数量应为3: ${divs.length}`) &&
     assert(revisionSpans.length === 3, `标记数量应为3: ${revisionSpans.length}`) &&
-    assert(revision.getText() === '123456', `getText 错误: "${revision.getText()}"`)
+    assert(revision.getText() === '12\n34\n56', `getText 错误: "${revision.getText()}"`)
   );
 });
 
@@ -281,7 +281,7 @@ test('6.2 整块选中的新增修订 - accept', () => {
   const { container, service, createRange } = createEnv(
     '<div>12</div><div>34</div><div>56</div>'
   );
-  const revision = service.createInsert({ range: createRange(0, 6), author: 'test' });
+  const revision = service.createInsert({ range: createRange(0, 8), author: 'test' });
   service.accept(revision);
 
   return (
@@ -295,7 +295,7 @@ test('6.3 整块选中的新增修订 - reject', () => {
   const { container, service, createRange } = createEnv(
     '<div>12</div><div>34</div><div>56</div>'
   );
-  const revision = service.createInsert({ range: createRange(0, 6), author: 'test' });
+  const revision = service.createInsert({ range: createRange(0, 8), author: 'test' });
   service.reject(revision);
 
   return (
@@ -323,8 +323,8 @@ test('7.2 跨块内部分选中', () => {
   const { container, service, createRange } = createEnv(
     '<div>1234</div><div>5678</div>'
   );
-  /* 选中 "2345" (位置 1-5)，跨过块边界 */
-  service.createInsert({ range: createRange(1, 5), author: 'test' });
+  /* 选中 "2345" (位置 1-6, 跨虚拟 \n) */
+  service.createInsert({ range: createRange(1, 6), author: 'test' });
 
   const divs = container.querySelectorAll(':scope > div');
   const revisionSpans = container.querySelectorAll('.revision-insert');
@@ -346,8 +346,8 @@ test('8.1 跨块新增修订拒绝 - 段落合并', () => {
   const { container, service, createRange } = createEnv(
     '<div>ABC</div><div>DEF</div>'
   );
-  /* 选中 "CDE" 跨越两个段落 (位置 2-5) */
-  const revision = service.createInsert({ range: createRange(2, 5), author: 'test' });
+  /* 选中 "CDE" 跨越两个段落 (位置 2-6, 含虚拟 \n) */
+  const revision = service.createInsert({ range: createRange(2, 6), author: 'test' });
   service.reject(revision);
 
   const divs = container.querySelectorAll(':scope > div');
@@ -361,8 +361,8 @@ test('8.2 跨块删除修订接受 - 段落合并', () => {
   const { container, service, createRange } = createEnv(
     '<div>ABC</div><div>DEF</div>'
   );
-  /* 选中 "CDE" 跨越两个段落 */
-  const revision = service.createDelete({ range: createRange(2, 5), author: 'test' });
+  /* 选中 "CDE" 跨越两个段落 (位置 2-6) */
+  const revision = service.createDelete({ range: createRange(2, 6), author: 'test' });
   service.accept(revision);
 
   const divs = container.querySelectorAll(':scope > div');
@@ -376,7 +376,7 @@ test('8.3 跨块新增修订接受 - 不合并', () => {
   const { container, service, createRange } = createEnv(
     '<div>ABC</div><div>DEF</div>'
   );
-  const revision = service.createInsert({ range: createRange(2, 5), author: 'test' });
+  const revision = service.createInsert({ range: createRange(2, 6), author: 'test' });
   service.accept(revision);
 
   const divs = container.querySelectorAll(':scope > div');
@@ -391,7 +391,7 @@ test('8.4 跨块删除修订拒绝 - 不合并', () => {
   const { container, service, createRange } = createEnv(
     '<div>ABC</div><div>DEF</div>'
   );
-  const revision = service.createDelete({ range: createRange(2, 5), author: 'test' });
+  const revision = service.createDelete({ range: createRange(2, 6), author: 'test' });
   service.reject(revision);
 
   const divs = container.querySelectorAll(':scope > div');
@@ -406,8 +406,8 @@ test('8.5 跨块新增修订拒绝 - 全选三段', () => {
   const { container, service, createRange } = createEnv(
     '<div>AA</div><div>BB</div><div>CC</div>'
   );
-  /* 全选 "AABBCC" */
-  const revision = service.createInsert({ range: createRange(0, 6), author: 'test' });
+  /* 全选 "AABBCC" (位置 0-8, 含虚拟 \n) */
+  const revision = service.createInsert({ range: createRange(0, 8), author: 'test' });
   service.reject(revision);
 
   return assert(
@@ -420,7 +420,7 @@ test('8.6 跨块删除修订接受 - 全选三段', () => {
   const { container, service, createRange } = createEnv(
     '<div>AA</div><div>BB</div><div>CC</div>'
   );
-  const revision = service.createDelete({ range: createRange(0, 6), author: 'test' });
+  const revision = service.createDelete({ range: createRange(0, 8), author: 'test' });
   service.accept(revision);
 
   return assert(
@@ -449,8 +449,8 @@ test('8.8 跨块新增修订拒绝 - 部分选中', () => {
   const { container, service, createRange } = createEnv(
     '<div>1234</div><div>5678</div>'
   );
-  /* 选中 "345" (位置 2-5) */
-  const revision = service.createInsert({ range: createRange(2, 5), author: 'test' });
+  /* 选中 "345" (位置 2-6, 含虚拟 \n) */
+  const revision = service.createInsert({ range: createRange(2, 6), author: 'test' });
   service.reject(revision);
 
   const divs = container.querySelectorAll(':scope > div');
@@ -468,10 +468,10 @@ test('9.1 跨块删除修订部分接受 - 跨块范围 → 合并段落', () =>
   const { container, service, createRange } = createEnv(
     '<div>ABC</div><div>DEF</div>'
   );
-  /* 删除修订覆盖 "BCDE" (位置 1-5) */
-  service.createDelete({ range: createRange(1, 5), author: 'test' });
-  /* 部分接受 "CD" (位置 2-4) → 删除 CD，保留 B 和 E */
-  service.acceptInRange(2, 4);
+  /* 删除修订覆盖 "BCDE" (位置 1-6, 含虚拟 \n) */
+  service.createDelete({ range: createRange(1, 6), author: 'test' });
+  /* 部分接受 "CD" (位置 2-5, 含虚拟 \n) → 删除 CD，保留 B 和 E */
+  service.acceptInRange(2, 5);
 
   const divs = container.querySelectorAll(':scope > div');
   return (
@@ -484,10 +484,10 @@ test('9.2 跨块新增修订部分拒绝 - 跨块范围 → 合并段落', () =>
   const { container, service, createRange } = createEnv(
     '<div>ABC</div><div>DEF</div>'
   );
-  /* 新增修订覆盖 "BCDE" (位置 1-5) */
-  service.createInsert({ range: createRange(1, 5), author: 'test' });
-  /* 部分拒绝 "CD" (位置 2-4) → 删除 CD，保留 B 和 E */
-  service.rejectInRange(2, 4);
+  /* 新增修订覆盖 "BCDE" (位置 1-6, 含虚拟 \n) */
+  service.createInsert({ range: createRange(1, 6), author: 'test' });
+  /* 部分拒绝 "CD" (位置 2-5, 含虚拟 \n) → 删除 CD，保留 B 和 E */
+  service.rejectInRange(2, 5);
 
   const divs = container.querySelectorAll(':scope > div');
   return (
@@ -500,8 +500,8 @@ test('9.3 跨块删除修订部分接受 - 非跨块范围 → 不合并', () =>
   const { container, service, createRange } = createEnv(
     '<div>ABC</div><div>DEF</div>'
   );
-  /* 删除修订覆盖 "BCDE" (位置 1-5) */
-  service.createDelete({ range: createRange(1, 5), author: 'test' });
+  /* 删除修订覆盖 "BCDE" (位置 1-6, 含虚拟 \n) */
+  service.createDelete({ range: createRange(1, 6), author: 'test' });
   /* 部分接受 "B" (位置 1-2) → 删除 B，保留 CDE */
   service.acceptInRange(1, 2);
 
@@ -516,8 +516,8 @@ test('9.4 跨块删除修订接受 - 最后一个块被清空 → 继续合并�
   const { container, service, createRange } = createEnv(
     '<div>AB</div><div>CD</div><div>EF</div>'
   );
-  /* 删除修订覆盖 "BCD" (位置 1-4), 跨块1和块2 */
-  const revision = service.createDelete({ range: createRange(1, 4), author: 'test' });
+  /* 删除修订覆盖 "BCD" (位置 1-5, 含虚拟 \n), 跨块1和块2 */
+  const revision = service.createDelete({ range: createRange(1, 5), author: 'test' });
   service.accept(revision);
 
   const divs = container.querySelectorAll(':scope > div');
@@ -531,8 +531,8 @@ test('9.5 跨块新增修订拒绝 - 最后一个块被清空 → 继续合并�
   const { container, service, createRange } = createEnv(
     '<div>AB</div><div>CD</div><div>EF</div>'
   );
-  /* 新增修订覆盖 "BCD" (位置 1-4), 跨块1和块2 */
-  const revision = service.createInsert({ range: createRange(1, 4), author: 'test' });
+  /* 新增修订覆盖 "BCD" (位置 1-5, 含虚拟 \n), 跨块1和块2 */
+  const revision = service.createInsert({ range: createRange(1, 5), author: 'test' });
   service.reject(revision);
 
   const divs = container.querySelectorAll(':scope > div');
@@ -546,10 +546,10 @@ test('9.6 跨块删除修订部分接受 - 最后一个块被清空 → 继续�
   const { container, service, createRange } = createEnv(
     '<div>AB</div><div>CD</div><div>EF</div>'
   );
-  /* 删除修订覆盖 "ABCD" (位置 0-4) */
-  service.createDelete({ range: createRange(0, 4), author: 'test' });
-  /* 部分接受 "BCD" (位置 1-4) → 删除 BCD，保留 A */
-  service.acceptInRange(1, 4);
+  /* 删除修订覆盖 "ABCD" (位置 0-5, 含虚拟 \n) */
+  service.createDelete({ range: createRange(0, 5), author: 'test' });
+  /* 部分接受 "BCD" (位置 1-5, 含虚拟 \n) → 删除 BCD，保留 A */
+  service.acceptInRange(1, 5);
 
   const divs = container.querySelectorAll(':scope > div');
   return (

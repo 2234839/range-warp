@@ -300,4 +300,13 @@ export class Editor {
     this._adapter.getContainer().innerHTML = html;
     this.refresh();
   }
+
+  /**
+   * 从原生 DOM Range 创建 Range 实例（位置包含虚拟 \n）
+   */
+  createRangeFromDOM(domRange: globalThis.Range): Range | null {
+    const pos = this._adapter.getDOMRangePosition(domRange);
+    if (!pos) return null;
+    return this.createRange(pos.start, pos.end);
+  }
 }

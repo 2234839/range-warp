@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { ref, onMounted, onBeforeUnmount, useTemplateRef, readonly } from 'vue';
   import { useNativeEditor } from './useNativeEditor';
-  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition, TOOLBAR_BUTTONS, type FormatState } from './editor-utils';
+  import { EMPTY_FORMAT_STATE, STYLE_KEYS, TOOLBAR_BUTTONS, type FormatState } from './editor-utils';
 
   const editDiv = useTemplateRef('editDiv');
 
@@ -52,16 +52,17 @@
     const styleKey = STYLE_KEYS[format];
     if (!styleKey) return;
 
-    /** 若未传入位置，从当前选区获取 */
+    /** 若未传入位置，从当前浏览器选区获取 */
     let rangeStart = start;
     let rangeEnd = end;
     if (rangeStart === undefined || rangeEnd === undefined) {
-      const { ownerWindow, container } = composable.selectionContext.value;
-      if (!container) return;
-      const pos = getSelectionPosition(container, ownerWindow);
-      if (!pos) return;
-      rangeStart = pos.start;
-      rangeEnd = pos.end;
+      const { ownerWindow } = composable.selectionContext.value;
+      const selection = ownerWindow.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      const rangeObj = ed.createRangeFromDOM(selection.getRangeAt(0));
+      if (!rangeObj) return;
+      rangeStart = rangeObj.start;
+      rangeEnd = rangeObj.end;
     }
 
     if (formatState.value[styleKey]) {
@@ -77,16 +78,22 @@
   /** 更新格式状态 */
   function updateFormatState() {
     const ed = composable.editor.value;
-    const { ownerWindow, container } = composable.selectionContext.value;
-    if (!ed || !container) return;
+    const { ownerWindow } = composable.selectionContext.value;
+    if (!ed) return;
 
-    const pos = getSelectionPosition(container, ownerWindow);
-    if (!pos || pos.start === pos.end) {
+    const selection = ownerWindow.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.getRangeAt(0).collapsed) {
       formatState.value = EMPTY_FORMAT_STATE;
       return;
     }
 
-    formatState.value = ed.getFormatState(pos.start, pos.end);
+    const rangeObj = ed.createRangeFromDOM(selection.getRangeAt(0));
+    if (!rangeObj || rangeObj.start === rangeObj.end) {
+      formatState.value = EMPTY_FORMAT_STATE;
+      return;
+    }
+
+    formatState.value = ed.getFormatState(rangeObj.start, rangeObj.end);
   }
 
   /** 复制HTML内容 */
@@ -96,8 +103,9 @@
 
   /** 更新选中的文本范围 */
   function updateSelectedRange() {
-    const { ownerWindow, container } = composable.selectionContext.value;
-    if (!container) return;
+    const ed = composable.editor.value;
+    const { ownerWindow } = composable.selectionContext.value;
+    if (!ed) return;
 
     const selection = ownerWindow.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.getRangeAt(0).collapsed) {
@@ -107,12 +115,12 @@
       return;
     }
 
-    const pos = getSelectionPosition(container, ownerWindow);
-    if (!pos) return;
+    const rangeObj = ed.createRangeFromDOM(selection.getRangeAt(0));
+    if (!rangeObj) return;
 
-    selectedRange.value = { start: pos.start, end: pos.end };
-    selectedText.value = selection.getRangeAt(0).toString();
-    emit('selectionChange', pos.start, pos.end);
+    selectedRange.value = { start: rangeObj.start, end: rangeObj.end };
+    selectedText.value = rangeObj.getText();
+    emit('selectionChange', rangeObj.start, rangeObj.end);
   }
 
   /** 暴露给父组件调用的方法 */

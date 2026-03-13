@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { ref, computed, onMounted, onBeforeUnmount, useTemplateRef } from 'vue';
   import { useDebounceFn } from '@vueuse/core';
-  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getSelectionPosition, getFormattingAncestors, wrapWithMissingFormatting, TOOLBAR_BUTTONS, type FormatState, type EditorComposable } from './editor-utils';
+  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getFormattingAncestors, wrapWithMissingFormatting, TOOLBAR_BUTTONS, type FormatState, type EditorComposable } from './editor-utils';
   import { useUEditorPlus } from './useUEditorPlus';
   import { useNativeEditor } from './useNativeEditor';
   import { getNonCopyableSelector } from '../core/adapters/DOMRangeAdapter';
@@ -135,12 +135,15 @@
       return;
     }
 
-    /* 编辑器内非折叠选区 → 更新选区 */
-    const pos = getSelectionPosition(container, ownerWindow);
-    if (!pos) return;
+    /* 编辑器内非折叠选区 → 使用 adapter 的虚拟位置系统计算 */
+    const editor = activeEditor.value;
+    if (!editor) return;
 
-    const text = range.toString();
-    const selectionState = { start: pos.start, end: pos.end, text };
+    const rangeObj = editor.createRangeFromDOM(range);
+    if (!rangeObj) return;
+
+    const text = rangeObj.getText();
+    const selectionState = { start: rangeObj.start, end: rangeObj.end, text };
     currentSelection.value = selectionState;
 
     /**
@@ -152,7 +155,7 @@
     }
 
     updateFormatState();
-    emit('selectionChange', pos.start, pos.end, text);
+    emit('selectionChange', rangeObj.start, rangeObj.end, text);
   }
 
   /**

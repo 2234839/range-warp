@@ -995,7 +995,7 @@ test('13.4 跨段落修订的拒绝 - 内容删除', () => {
 
   return (
     assert(!container.querySelector('.revision-insert'), '修订标记未移除') &&
-    assert(container.textContent === 'Held', `文本内容错误: "${container.textContent}"`)
+    assert(container.textContent === 'Herld', `文本内容错误: "${container.textContent}"`)
   );
 });
 

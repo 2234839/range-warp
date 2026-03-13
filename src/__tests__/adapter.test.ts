@@ -397,11 +397,11 @@ const testCases: TestCase[] = [
   {
     name: 'Test 11.2',
     initialHTML: '<strong>line1</strong><br><strong>line2</strong>',
-    operation: (adapter, start, end) => adapter.setStyle(0, 10, 'italic'),
+    operation: (adapter, start, end) => adapter.setStyle(0, 11, 'italic'),
     start: 0,
-    end: 10,
+    end: 11,
     expectedHTML: '<em><strong>line1</strong></em><br><em><strong>line2</strong></em>',
-    description: '跨换行应用样式'
+    description: '跨换行应用样式（<br> 贡献虚拟 \\n，总长 11）'
   },
 
   // ==================== Unicode/Emoji ====================
@@ -491,21 +491,21 @@ const testCases: TestCase[] = [
   {
     name: 'Test 15.1',
     initialHTML: '<p>123</p><p>456</p>',
-    operation: (adapter, start, end) => adapter.setStyle(2, 4, 'bold'),
+    operation: (adapter, start, end) => adapter.setStyle(2, 5, 'bold'),
     start: 0,
     end: 0,
     expectedHTML: '<p>12<strong>3</strong></p><p><strong>4</strong>56</p>',
-    description: '跨段落操作'
+    description: '跨段落操作（虚拟 \\n 在位置 3，"3\\n4" = 位置 2-5）'
   },
 
   {
     name: 'Test 15.2',
     initialHTML: '<div>123</div><div>456</div>',
-    operation: (adapter, start, end) => adapter.setStyle(2, 4, 'italic'),
+    operation: (adapter, start, end) => adapter.setStyle(2, 5, 'italic'),
     start: 0,
     end: 0,
     expectedHTML: '<div>12<em>3</em></div><div><em>4</em>56</div>',
-    description: '跨 div 块级元素操作'
+    description: '跨 div 块级元素操作（虚拟 \\n 在位置 3，"3\\n4" = 位置 2-5）'
   },
 
   // ==================== 复杂样式移除场景 ====================

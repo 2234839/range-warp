@@ -503,16 +503,16 @@ test('6.1 跨段落创建书签 - 正确拆分', () => {
 
 test('6.2 跨块书签 - getText 合并内容', () => {
   const { service, createRange } = createEnv('<p>第一段</p><p>第二段</p>');
-  const bookmark = service.create({ name: '跨块', range: createRange(2, 6) });
+  const bookmark = service.create({ name: '跨块', range: createRange(2, 7) });
   return assert(
-    bookmark.getText() === '段第二段',
-    `期望 "段第二段"，实际: "${bookmark.getText()}"`
+    bookmark.getText() === '段\n第二段',
+    `期望 "段\\n第二段"，实际: "${bookmark.getText()}"`
   );
 });
 
 test('6.3 跨块书签 - getRange 合并范围', () => {
   const { service, createRange } = createEnv('<p>第一段</p><p>第二段</p>');
-  const bookmark = service.create({ name: '跨块', range: createRange(2, 6) });
+  const bookmark = service.create({ name: '跨块', range: createRange(2, 7) });
   const range = bookmark.getRange();
 
   return assert(
@@ -524,14 +524,14 @@ test('6.3 跨块书签 - getRange 合并范围', () => {
       `期望 start=2，实际: ${range!.start}`
     )
     && assert(
-      range!.end === 6,
-      `期望 end=6，实际: ${range!.end}`
+      range!.end === 7,
+      `期望 end=7，实际: ${range!.end}`
     );
 });
 
 test('6.4 跨块书签删除 - 全部移除', () => {
   const { container, service, createRange } = createEnv('<p>第一段</p><p>第二段</p>');
-  const bookmark = service.create({ name: '跨块删', range: createRange(2, 6) });
+  const bookmark = service.create({ name: '跨块删', range: createRange(2, 7) });
   service.delete(bookmark);
 
   const elements = container.querySelectorAll('[data-bookmark-id]');
@@ -539,6 +539,82 @@ test('6.4 跨块书签删除 - 全部移除', () => {
     elements.length === 0,
     `期望 0 个书签元素，实际: ${elements.length}`
   );
+});
+
+test('6.5 跨空行创建书签 - 空行也应被包裹', () => {
+  /**
+   * 场景：两个段落之间有空行（<p><br></p>），书签应覆盖整个选区包括空行
+   *
+   * HTML 结构：<p>第一段</p><p><br></p><p><br></p><p>第二段</p>
+   * 位置系统文本： "第一段\n\n\n第二段\n" (len=10)
+   * 选区 [0, 10] 覆盖全部内容 + 中间两个空行
+   */
+  const { container, service, createRange } = createEnv(
+    '<p>第一段</p><p><br></p><p><br></p><p>第二段</p>'
+  );
+  service.create({ name: '跨空行', range: createRange(0, 10) });
+
+  /** 检查：<br> 标签应该被包在 bookmark span 内 */
+  const bookmarkElements = container.querySelectorAll('[data-bookmark-id]');
+  const brElements = container.querySelectorAll('br');
+
+  /** 计算有多少 <br> 被包在 bookmark 内 */
+  let brInsideBookmark = 0;
+  for (const br of brElements) {
+    if (br.closest('.bookmark')) brInsideBookmark++;
+  }
+
+  return assert(
+    bookmarkElements.length >= 2,
+    `期望至少 2 个书签元素（文本部分），实际: ${bookmarkElements.length}，HTML: ${container.innerHTML}`
+  )
+    && assert(
+      brInsideBookmark === 2,
+      `期望 2 个 <br> 在 bookmark 内，实际: ${brInsideBookmark}，HTML: ${container.innerHTML}`
+    );
+});
+
+test('6.6 跨空行书签 - getText 合并内容', () => {
+  const { service, createRange } = createEnv(
+    '<p>第一段</p><p><br></p><p><br></p><p>第二段</p>'
+  );
+  const bookmark = service.create({ name: '跨空行文本', range: createRange(0, 10) });
+
+  return assert(
+    bookmark.getText() === '第一段\n\n\n第二段',
+    `期望 "第一段\\n\\n\\n第二段"，实际: "${bookmark.getText()}"`
+  );
+});
+
+test('6.7 跨空行书签 - getRange 范围正确', () => {
+  const { service, createRange } = createEnv(
+    '<p>第一段</p><p><br></p><p>第二段</p>'
+  );
+  const bookmark = service.create({ name: '跨空行范围', range: createRange(0, 9) });
+  const range = bookmark.getRange();
+
+  return assert(
+    range !== null && range.start === 0 && range.end === 8,
+    `期望 [0, 8]，实际: ${range ? `[${range.start}, ${range.end}]` : 'null'}`
+  );
+});
+
+test('6.8 跨空行书签删除 - 全部移除', () => {
+  const { container, service, createRange } = createEnv(
+    '<p>第一段</p><p><br></p><p><br></p><p>第二段</p>'
+  );
+  const bookmark = service.create({ name: '跨空行删', range: createRange(0, 10) });
+  service.delete(bookmark);
+
+  const elements = container.querySelectorAll('[data-bookmark-id]');
+  return assert(
+    elements.length === 0,
+    `期望 0 个书签元素，实际: ${elements.length}，HTML: ${container.innerHTML}`
+  )
+    && assert(
+      container.querySelectorAll('br').length === 2,
+      `期望 <br> 标签保留（2个），实际: ${container.querySelectorAll('br').length}`
+    );
 });
 
 /* ==================== 7. 边界情况 ==================== */

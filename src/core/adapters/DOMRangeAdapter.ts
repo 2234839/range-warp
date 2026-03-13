@@ -329,7 +329,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
   /**
    * 在指定根元素内创建 DOM Range
    * @param root 根元素
-   * @param start 起始字符下标（相对于根元素内的文本）
+   * @param start 起始字符下标（相对于根元素内的文本，包含虚拟 \n）
    * @param end 结束字符下标
    * @param allowEndBoundary 是否在末尾边界时回退到最后一个节点
    */
@@ -337,7 +337,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     start = Math.max(0, start);
     end = Math.max(start, end);
 
-    const snapshot = this._buildSnapshot();
+    const { snapshot } = this._buildTextNodeData();
     let startNode: Text | null = null;
     let startOffset = 0;
     let endNode: Text | null = null;
@@ -360,7 +360,39 @@ export class DOMRangeAdapter implements IRangeAdapter {
       if (startNode && endNode) break;
     }
 
-    /* 处理边界情况：位置在文档末尾 */
+    /** 虚拟 \n 位置落在文本节点间隙中：映射到最近的文本节点 */
+    if (!startNode && snapshot.length > 0) {
+      for (let i = snapshot.length - 1; i >= 0; i--) {
+        const { node, nodeEnd } = snapshot[i];
+        if (nodeEnd <= start) {
+          startNode = node;
+          startOffset = (node.textContent || '').length;
+          break;
+        }
+      }
+      /** 没找到前一个节点，取第一个节点的开头 */
+      if (!startNode) {
+        startNode = snapshot[0].node;
+        startOffset = 0;
+      }
+    }
+
+    if (!endNode && snapshot.length > 0) {
+      for (let i = snapshot.length - 1; i >= 0; i--) {
+        const { node, nodeEnd } = snapshot[i];
+        if (nodeEnd <= end) {
+          endNode = node;
+          endOffset = (node.textContent || '').length;
+          break;
+        }
+      }
+      if (!endNode) {
+        endNode = snapshot[0].node;
+        endOffset = 0;
+      }
+    }
+
+    /** 处理边界情况：位置在文档末尾 */
     if (allowEndBoundary && lastNode && (!startNode || !endNode)) {
       const lastOffset = (lastNode.textContent || '').length;
       if (!startNode) { startNode = lastNode; startOffset = lastOffset; }
@@ -381,14 +413,38 @@ export class DOMRangeAdapter implements IRangeAdapter {
   getText(start: number, end: number): string {
     const snapshot = this._buildSnapshot();
     const parts: string[] = [];
+    let prevEnd = 0;
 
     for (const { node, nodeStart, nodeEnd } of snapshot) {
       if (nodeStart >= end) break;
-      if (nodeEnd <= start) continue;
+      if (nodeEnd <= start) {
+        prevEnd = nodeEnd;
+        continue;
+      }
+
+      /** 在文本节点间隙处插入虚拟换行 */
+      if (nodeStart > prevEnd && nodeStart < end) {
+        const breakStart = Math.max(prevEnd, start);
+        const breakEnd = Math.min(nodeStart, end);
+        const breakCount = breakEnd - breakStart;
+        if (breakCount > 0) {
+          parts.push('\n'.repeat(breakCount));
+        }
+      }
 
       const overlapStart = Math.max(nodeStart, start) - nodeStart;
       const overlapEnd = Math.min(nodeEnd, end) - nodeStart;
       parts.push(getUtf16Slice(node.textContent || '', overlapStart, overlapEnd));
+
+      prevEnd = nodeEnd;
+    }
+
+    /** 处理末尾的虚拟换行（如最后一个块结束后的 \n） */
+    if (prevEnd < end) {
+      const breakCount = Math.min(end - prevEnd, end - start);
+      if (breakCount > 0) {
+        parts.push('\n'.repeat(breakCount));
+      }
     }
 
     return parts.join('');
@@ -588,12 +644,13 @@ export class DOMRangeAdapter implements IRangeAdapter {
      * 'wrap' (默认): 把所有内容包裹进一个容器
      */
     const configName = getConfigNameForElement(newElement);
-    const crossBlock = configName ? CONTAINER_CONFIGS[configName]?.crossBlock : undefined;
+    const config = configName ? CONTAINER_CONFIGS[configName] : undefined;
+    const crossBlock = config?.crossBlock;
 
     if (crossBlock === 'split') {
       const blockElements = this.getBlockElementsInRange(start, end);
       if (blockElements.length > 0) {
-        this.wrapAcrossBlocks(start, end, elementCreator);
+        this.wrapAcrossBlocks(start, end, elementCreator, config?.wrapEmpty ?? false);
         this.normalize(start, end);
         return;
       }
@@ -663,9 +720,12 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * @param start 起始位置
    * @param end 结束位置
    * @param elementCreator 元素创建函数
+   * @param wrapEmpty 是否同时包裹范围内无文本内容的空块元素
    */
-  private wrapAcrossBlocks(start: number, end: number, elementCreator: () => Element): void {
+  private wrapAcrossBlocks(start: number, end: number, elementCreator: () => Element, wrapEmpty: boolean): void {
     const snapshot = this._buildSnapshot();
+
+    /** 1. 包裹文本节点 */
     for (const { node, nodeStart, nodeEnd } of snapshot) {
       if (nodeStart >= end) break;
       if (nodeEnd <= start) continue;
@@ -681,6 +741,46 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
         const element = elementCreator();
         wrapRangeContents(localRange, element);
+      }
+    }
+
+    /**
+     * 2. 包裹范围内的空块元素
+     *
+     * 空块（无文本内容的段落）不会出现在文本快照中，
+     * 但视觉上属于选中范围的一部分，需要一并包裹使容器覆盖完整
+     *
+     * 通用处理：检测所有与 DOM Range 相交的块级元素，
+     * 对其中没有文本内容的块，将其子节点包裹到容器元素中
+     */
+    if (!wrapEmpty) return;
+
+    const range = this.createDOMRange(start, end);
+    if (!range) return;
+
+    const containerSelector = buildContainerSelector();
+    /** 只处理容器型块级元素（能包含子元素），不处理 br 等 void 叶子元素 */
+    const blockContainerSelector = [...BLOCK_TAG_NAMES].join(', ');
+    for (const block of this._container.querySelectorAll(blockContainerSelector)) {
+      if (!range.intersectsNode(block)) continue;
+
+      /** 有文本内容的块已被步骤 1 处理，跳过 */
+      if (block.textContent !== '') continue;
+
+      /** 包裹空块内的所有子元素（通用，不限定标签类型） */
+      const children = [...block.children];
+      for (const child of children) {
+        if (child.closest(containerSelector)) continue;
+        const element = elementCreator();
+        block.replaceChild(element, child);
+        element.appendChild(child);
+      }
+
+      /** 完全无子节点的空块，插入 br 以保持视觉占位 */
+      if (children.length === 0) {
+        const element = elementCreator();
+        element.appendChild(this._doc.createElement('br'));
+        block.appendChild(element);
       }
     }
   }
@@ -957,27 +1057,90 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 单次 TreeWalker 遍历收集文本节点数据
+   * 递归遍历 DOM 收集文本节点数据
+   *
+   * 位置系统包含块边界虚拟 \n：每个叶子块（不含块级子元素的块级元素）
+   * 在其文本内容之后贡献一个虚拟 \n，<br> 标签在其位置处贡献一个虚拟 \n
+   *
+   * 参考 Quill Delta 和浏览器 innerText 的设计
    */
   private _buildTextNodeData(): {
     snapshot: Array<{ node: Text; nodeStart: number; nodeEnd: number }>;
     index: Map<Text, { start: number; end: number }>;
+    totalLength: number;
+    /** <br> 元素到其虚拟 \n 位置的映射 */
+    brIndex: Map<Element, number>;
   } {
     const snapshot: Array<{ node: Text; nodeStart: number; nodeEnd: number }> = [];
     const index = new Map<Text, { start: number; end: number }>();
-    let pos = 0;
-    const walker = this._doc.createTreeWalker(this._container, NodeFilter.SHOW_TEXT);
-    let node;
-    /* NodeFilter.SHOW_TEXT 保证返回文本节点，as Text 声明实际类型 */
-    while ((node = walker.nextNode() as Text)) {
-      const len = getUnicodeStringLength(node.textContent || '');
-      if (len > 0) {
-        index.set(node, { start: pos, end: pos + len });
-        snapshot.push({ node, nodeStart: pos, nodeEnd: pos + len });
+    const brIndex = new Map<Element, number>();
+    const ctx = { pos: 0 };
+
+    /**
+     * 递归处理元素的子节点
+     * @returns 处理过程中的状态信息
+     */
+    const walk = (element: Element): {
+      addedBreak: boolean;
+      /** 是否包含文本内容 */
+      hasTextContent: boolean;
+      /** 是否包含 <br> 元素 */
+      hasBr: boolean;
+    } => {
+      let addedBreak = false;
+      let hasTextContent = false;
+      let hasBr = false;
+
+      for (const child of element.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const textNode = child as Text;
+          const len = getUnicodeStringLength(textNode.textContent || '');
+          if (len > 0) {
+            hasTextContent = true;
+            index.set(textNode, { start: ctx.pos, end: ctx.pos + len });
+            snapshot.push({ node: textNode, nodeStart: ctx.pos, nodeEnd: ctx.pos + len });
+          }
+          ctx.pos += len;
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          const el = child as Element;
+          const tag = el.tagName.toLowerCase();
+
+          if (tag === 'br') {
+            hasBr = true;
+            brIndex.set(el, ctx.pos);
+            ctx.pos += 1;
+            addedBreak = true;
+          } else if (BLOCK_TAG_NAMES.has(tag)) {
+            const result = walk(el);
+            /**
+             * 叶子块（不包含块级子元素）在内容后添加虚拟 \n
+             * 外层容器块（如 div 包含 p）不添加，避免重复
+             *
+             * 特殊情况：叶子块仅含 <br> 且无文本内容时（如 <p><br></p>），
+             * <br> 已经贡献了该行的 \n，不再追加尾部 \n
+             */
+            const hasBlockChild = [...el.children].some(c => BLOCK_TAG_NAMES.has(c.tagName.toLowerCase()));
+            if (!hasBlockChild && !(result.hasBr && !result.hasTextContent)) {
+              ctx.pos += 1;
+              addedBreak = true;
+            }
+          } else {
+            /**
+             * 行内元素（如 strong、em、span）：递归处理后传播 hasTextContent/hasBr
+             * 否则当文本在行内元素内时，父级无法正确判断是否有文本内容
+             */
+            const result = walk(el);
+            hasTextContent = hasTextContent || result.hasTextContent;
+            hasBr = hasBr || result.hasBr;
+          }
+        }
       }
-      pos += len;
-    }
-    return { snapshot, index };
+
+      return { addedBreak, hasTextContent, hasBr };
+    };
+
+    walk(this._container);
+    return { snapshot, index, totalLength: ctx.pos, brIndex };
   }
 
   private _buildSnapshot(): Array<{ node: Text; nodeStart: number; nodeEnd: number }> {
@@ -989,20 +1152,39 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 从文本节点索引计算元素位置（替代 getElementPosition，零 DOM Range 创建）
+   * 从文本节点索引和 <br> 索引计算元素位置
+   *
+   * 遍历元素内所有文本节点和 <br> 元素，利用索引映射计算总位置范围
+   * 对于只包含 <br> 而无文本节点的元素（如 <span><br></span>），
+   * 通过 brIndex 精确查找 <br> 的虚拟 \n 位置
    */
   private _getPositionFromIndex(
     element: Element,
     index: Map<Text, { start: number; end: number }>,
+    brIndex?: Map<Element, number>,
   ): { start: number; end: number } | null {
     let min = Infinity, max = 0;
-    const walker = this._doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const walker = this._doc.createTreeWalker(element, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
     let node;
-    /* NodeFilter.SHOW_TEXT 保证返回文本节点，as Text 声明实际类型 */
-    while ((node = walker.nextNode() as Text)) {
-      const p = index.get(node);
+
+    while ((node = walker.nextNode())) {
+      if (isElementNode(node)) {
+        if (node.tagName.toLowerCase() === 'br' && brIndex) {
+          const brPos = brIndex.get(node);
+          if (brPos !== undefined) {
+            min = Math.min(min, brPos);
+            max = Math.max(max, brPos + 1);
+          }
+        }
+        continue;
+      }
+
+      /* NodeFilter.SHOW_TEXT 保证返回文本节点，as Text 声明实际类型 */
+      const textNode = node as Text;
+      const p = index.get(textNode);
       if (p) { min = Math.min(min, p.start); max = Math.max(max, p.end); }
     }
+
     return min === Infinity ? null : { start: min, end: max };
   }
 
@@ -1025,7 +1207,12 @@ export class DOMRangeAdapter implements IRangeAdapter {
         continue;
       }
 
-      if (element.textContent === '') {
+      /**
+       * 移除真正为空的容器（无子节点）
+       * 使用 childNodes.length 而非 textContent === ''，
+       * 因为包含 <br> 等非文本子节点的容器不应被视为空容器
+       */
+      if (element.childNodes.length === 0) {
         const configName = getConfigNameForElement(element);
         const config = configName ? CONTAINER_CONFIGS[configName] : undefined;
         if (config?.removeEmpty !== false) {
@@ -1109,8 +1296,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   getDocumentLength(): number {
-    const snapshot = this._buildSnapshot();
-    return snapshot.length > 0 ? snapshot[snapshot.length - 1].nodeEnd : 0;
+    return this._buildTextNodeData().totalLength;
   }
 
   findText(searchText: string): Array<{ start: number; end: number }> {
@@ -1417,8 +1603,76 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   getElementPosition(element: Element): { start: number; end: number } | null {
-    const index = this._buildIndex();
-    return this._getPositionFromIndex(element, index);
+    const { index, brIndex } = this._buildTextNodeData();
+    return this._getPositionFromIndex(element, index, brIndex);
+  }
+
+  /**
+   * 将原生 DOM Range 转换为虚拟位置（包含块边界的虚拟 \n）
+   *
+   * 与 Range.toString() 不同，此方法返回的位置与 getText/getDocumentLength 一致，
+   * 正确计入每个叶子块末尾和 <br> 的虚拟换行符
+   */
+  getDOMRangePosition(range: Range): { start: number; end: number } | null {
+    const { index, brIndex } = this._buildTextNodeData();
+    const start = this._nodeOffsetToPosition(range.startContainer, range.startOffset, index, brIndex);
+    const end = this._nodeOffsetToPosition(range.endContainer, range.endOffset, index, brIndex);
+    if (start === null || end === null) return null;
+    return { start, end };
+  }
+
+  /**
+   * 将 DOM 节点 + 偏移量转换为虚拟位置
+   */
+  private _nodeOffsetToPosition(
+    node: Node,
+    offset: number,
+    index: Map<Text, { start: number; end: number }>,
+    brIndex: Map<Element, number>,
+  ): number | null {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const pos = index.get(node as Text);
+      if (!pos) return null;
+      const textOffset = getUnicodeStringLength((node.textContent || '').slice(0, offset));
+      return pos.start + textOffset;
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element;
+      /** <br> 元素本身就是换行符的位置 */
+      if (el.tagName.toLowerCase() === 'br') {
+        const brPos = brIndex.get(el);
+        return brPos !== undefined ? brPos : null;
+      }
+
+      /**
+       * 元素节点 + offset：offset 指向第 offset 个子节点之前
+       * 找到该子节点之前最近的文本位置
+       */
+      const children = [...el.childNodes];
+      let bestPos: number | null = null;
+
+      for (let i = 0; i < offset && i < children.length; i++) {
+        const child = children[i];
+        if (child.nodeType === Node.TEXT_NODE) {
+          const p = index.get(child as Text);
+          if (p) bestPos = Math.max(bestPos ?? 0, p.end);
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          const childEl = child as Element;
+          if (childEl.tagName.toLowerCase() === 'br') {
+            const brPos = brIndex.get(childEl);
+            if (brPos !== undefined) bestPos = Math.max(bestPos ?? 0, brPos + 1);
+          } else {
+            const childPos = this._nodeOffsetToPosition(child, (child.childNodes as NodeListOf<ChildNode>).length, index, brIndex);
+            if (childPos !== null) bestPos = Math.max(bestPos ?? 0, childPos);
+          }
+        }
+      }
+
+      return bestPos;
+    }
+
+    return null;
   }
 
   registerContainerConfig(name: string, config: ContainerTagConfig): void {

@@ -52,6 +52,7 @@ export class BookmarkService {
       idAttribute: 'data-bookmark-id',
       splitRepair: 'fill-gaps',
       copyable: false,
+      wrapEmpty: true,
     });
     this.refresh();
   }

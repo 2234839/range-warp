@@ -45,6 +45,16 @@ export interface ContainerTagConfig {
    * false: 保留空容器（适用于需要占位标记的场景，如空书签）
    */
   removeEmpty?: boolean;
+  /**
+   * 跨块包裹时是否同时包裹范围内的空块（无文本内容的块级元素）
+   *
+   * 当为 true 时，wrapAcrossBlocks 不仅包裹文本节点，
+   * 还会检测范围内所有块级元素（如空段落、只含 <br> 的段落），
+   * 将其子节点一并包裹，使容器在视觉上覆盖完整的选区（包括空行）
+   *
+   * false (默认): 仅包裹有文本内容的块
+   */
+  wrapEmpty?: boolean;
 }
 
 /**
@@ -253,6 +263,16 @@ export interface IRangeAdapter {
    * @returns { start, end } 或 null（element 不在容器内时）
    */
   getElementPosition(element: Element): { start: number; end: number } | null;
+
+  /**
+   * 将原生 DOM Range 转换为虚拟位置（包含块边界的虚拟 \n）
+   *
+   * 与 Range.toString() 不同，返回的位置与 getText/getDocumentLength 一致
+   *
+   * @param range 原生 DOM Range
+   * @returns { start, end } 或 null
+   */
+  getDOMRangePosition(range: globalThis.Range): { start: number; end: number } | null;
 
   /**
    * 注册容器标签配置
