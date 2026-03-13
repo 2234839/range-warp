@@ -26,8 +26,8 @@ const REVISION_CONFIG: Omit<ContainerTagConfig, 'attributeSelector'> = {
 };
 
 function registerRevisionConfigs(adapter: IRangeAdapter): void {
-  adapter.registerContainerConfig('revision-insert', { ...REVISION_CONFIG, attributeSelector: '.revision-insert' });
-  adapter.registerContainerConfig('revision-delete', { ...REVISION_CONFIG, attributeSelector: '.revision-delete' });
+  adapter.registerContainerConfig('revision-insert', { ...REVISION_CONFIG, label: '插入修订', attributeSelector: '.revision-insert' });
+  adapter.registerContainerConfig('revision-delete', { ...REVISION_CONFIG, label: '删除修订', attributeSelector: '.revision-delete' });
 }
 
 export interface CreateRevisionOptions {

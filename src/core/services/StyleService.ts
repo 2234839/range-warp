@@ -14,15 +14,17 @@ import type { IRangeAdapter } from '../adapters/IRangeAdapter';
 interface StyleDefinition {
   /** 标签名 */
   tagName: string;
+  /** 中文标签 */
+  label: string;
 }
 
 /** 内置行内样式 */
 const INLINE_STYLES: Record<string, StyleDefinition> = {
-  bold: { tagName: 'strong' },
-  italic: { tagName: 'em' },
-  underline: { tagName: 'u' },
-  strikethrough: { tagName: 's' },
-  highlight: { tagName: 'mark' },
+  bold: { tagName: 'strong', label: '粗体' },
+  italic: { tagName: 'em', label: '斜体' },
+  underline: { tagName: 'u', label: '下划线' },
+  strikethrough: { tagName: 's', label: '删除线' },
+  highlight: { tagName: 'mark', label: '高亮' },
 };
 
 /** 所有内置样式名 */
@@ -38,8 +40,8 @@ export class StyleService {
 
   /** 注册内置样式配置 */
   private _registerBuiltInStyles(): void {
-    for (const [name, { tagName }] of Object.entries(INLINE_STYLES)) {
-      this._adapter.registerContainerConfig(name, { tagName, display: 'inline' });
+    for (const [name, { tagName, label }] of Object.entries(INLINE_STYLES)) {
+      this._adapter.registerContainerConfig(name, { tagName, label, display: 'inline' });
     }
   }
 

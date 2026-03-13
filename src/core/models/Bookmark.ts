@@ -8,7 +8,7 @@
  * - 提供完整的书签生命周期管理
  */
 
-import type { IRangeAdapter } from '../adapters/IRangeAdapter';
+import type { IRangeAdapter, TextIndex } from '../adapters/IRangeAdapter';
 import { Range } from './Range';
 
 /** 书签元数据接口 */
@@ -53,18 +53,20 @@ export class Bookmark {
    * 支持跨块书签：同一 bookmark ID 可对应多个元素，
    * 合并所有元素的范围为一个 Range
    *
+   * @param prebuiltIndex 可选的预构建索引（批量操作时传入以复用）
    * @returns Range 实例
    */
-  getRange(): Range | null {
+  getRange(prebuiltIndex?: TextIndex): Range | null {
     const elements = this._adapter.querySelectorAll(`[data-bookmark-id="${this.metadata.id}"]`);
 
     if (elements.length === 0) return null;
 
+    const index = prebuiltIndex || this._adapter.buildIndex();
     let minStart = Infinity;
     let maxEnd = 0;
 
     for (const element of elements) {
-      const pos = this._adapter.getElementPosition(element);
+      const pos = this._adapter.getElementPosition(element, index);
       if (pos) {
         minStart = Math.min(minStart, pos.start);
         maxEnd = Math.max(maxEnd, pos.end);

@@ -8,7 +8,7 @@
  * - 提供简洁的 API 给 UI 层使用
  */
 
-import type { IRangeAdapter } from './adapters/IRangeAdapter';
+import type { IRangeAdapter, TextIndex } from './adapters/IRangeAdapter';
 import { Range } from './models/Range';
 import { BookmarkService, type CreateBookmarkOptions } from './services/BookmarkService';
 import { RevisionService } from './services/RevisionService';
@@ -292,8 +292,8 @@ export class Editor {
   /**
    * 从原生 DOM Range 创建 Range 实例（位置包含虚拟 \n）
    */
-  createRangeFromDOM(domRange: globalThis.Range): Range | null {
-    const pos = this._adapter.getDOMRangePosition(domRange);
+  createRangeFromDOM(domRange: globalThis.Range, prebuiltIndex?: TextIndex): Range | null {
+    const pos = this._adapter.getDOMRangePosition(domRange, prebuiltIndex);
     if (!pos) return null;
     return this.createRange(pos.start, pos.end);
   }
@@ -301,7 +301,31 @@ export class Editor {
   /**
    * 获取元素在文档中的虚拟位置范围（包含块边界 \n）
    */
-  getElementPosition(element: Element): { start: number; end: number } | null {
-    return this._adapter.getElementPosition(element);
+  getElementPosition(element: Element, prebuiltIndex?: TextIndex): { start: number; end: number } | null {
+    return this._adapter.getElementPosition(element, prebuiltIndex);
+  }
+
+  /**
+   * 构建文本节点索引（一次性 O(N) 遍历）
+   *
+   * 批量调用 getElementPosition / createRangeFromDOM 时传入可避免 O(N²) 开销。
+   * DOM 结构变化后需重新构建。
+   */
+  buildIndex(): TextIndex {
+    return this._adapter.buildIndex();
+  }
+
+  /**
+   * 获取所有已注册的容器配置
+   */
+  getRegisteredConfigs(): Array<{ name: string; selector: string; idAttribute?: string; label?: string }> {
+    return this._adapter.getRegisteredConfigs();
+  }
+
+  /**
+   * 在编辑器容器内查询匹配选择器的元素
+   */
+  querySelectorAll(selector: string): Element[] {
+    return this._adapter.querySelectorAll(selector);
   }
 }

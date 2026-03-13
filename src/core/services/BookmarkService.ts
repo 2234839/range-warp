@@ -46,6 +46,7 @@ export class BookmarkService {
     this._adapter = adapter;
     adapter.registerContainerConfig('bookmark', {
       tagName: 'span',
+      label: '书签',
       attributeSelector: '.bookmark',
       display: 'inline',
       crossBlock: 'split',

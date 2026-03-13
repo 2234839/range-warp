@@ -10,6 +10,8 @@ export interface ContainerTagConfig {
   tagName: string;
   /** 可选的属性选择器 (用于区分不同类型的同标签) */
   attributeSelector?: string;
+  /** 中文标签（调试面板等展示用） */
+  label?: string;
   /** 显示类型: inline(行内), block(块级), inline-block(混合) */
   display?: 'inline' | 'block' | 'inline-block';
   /**
@@ -55,6 +57,23 @@ export interface ContainerTagConfig {
    * false (默认): 仅包裹有文本内容的块
    */
   wrapEmpty?: boolean;
+}
+
+/**
+ * 文本索引数据（预构建，用于批量元素定位避免重复遍历）
+ *
+ * 由 buildIndex() 构建，内部包含文本节点位置映射和虚拟换行符位置映射。
+ * 批量调用 getElementPosition / getDOMRangePosition 时传入可避免 O(N²) 开销。
+ */
+export interface TextIndex {
+  /** 文本节点 → 位置映射 */
+  index: Map<Text, { start: number; end: number }>;
+  /** <br> 元素 → 虚拟 \n 位置映射 */
+  brIndex: Map<Element, number>;
+  /** 文本节点快照（按文档顺序） */
+  snapshot: Array<{ node: Text; nodeStart: number; nodeEnd: number }>;
+  /** 文档总字符数 */
+  totalLength: number;
 }
 
 /**
@@ -263,22 +282,36 @@ export interface IRangeAdapter {
   /**
    * 计算元素在文档中的文本位置范围（基于 Unicode 字符下标）
    *
-   * 统一元素定位入口，上层模型不再直接使用原生 DOM Range API
+   * 统一元素定位入口，上层模型不再直接使用原生 DOM Range API。
+   * 批量调用时建议先 buildIndex() 再传入 prebuiltIndex 以避免 O(N²) 开销。
    *
    * @param element 目标元素
+   * @param prebuiltIndex 可选的预构建索引（批量操作时传入以复用）
    * @returns { start, end } 或 null（element 不在容器内时）
    */
-  getElementPosition(element: Element): { start: number; end: number } | null;
+  getElementPosition(element: Element, prebuiltIndex?: TextIndex): { start: number; end: number } | null;
 
   /**
    * 将原生 DOM Range 转换为虚拟位置（包含块边界的虚拟 \n）
    *
-   * 与 Range.toString() 不同，返回的位置与 getText/getDocumentLength 一致
+   * 与 Range.toString() 不同，返回的位置与 getText/getDocumentLength 一致。
+   * 批量调用时建议先 buildIndex() 再传入 prebuiltIndex 以避免 O(N²) 开销。
    *
    * @param range 原生 DOM Range
+   * @param prebuiltIndex 可选的预构建索引（批量操作时传入以复用）
    * @returns { start, end } 或 null
    */
-  getDOMRangePosition(range: globalThis.Range): { start: number; end: number } | null;
+  getDOMRangePosition(range: globalThis.Range, prebuiltIndex?: TextIndex): { start: number; end: number } | null;
+
+  /**
+   * 构建文本节点索引（一次性 O(N) 遍历）
+   *
+   * 返回的索引可在批量 getElementPosition / getDOMRangePosition 调用中复用，
+   * 将 N 次 O(N) 遍历优化为单次 O(N) 遍历。
+   *
+   * 注意：DOM 结构变化后需重新构建。
+   */
+  buildIndex(): TextIndex;
 
   /**
    * 注册容器标签配置
@@ -301,5 +334,12 @@ export interface IRangeAdapter {
    * @returns 新创建的元素
    */
   createConfigElement(configName: string, attrs?: Record<string, string>): Element;
+
+  /**
+   * 获取所有已注册的容器配置
+   *
+   * 返回配置名和对应的 CSS 选择器，供调试面板等上层使用
+   */
+  getRegisteredConfigs(): Array<{ name: string; selector: string; idAttribute?: string; label?: string }>;
 
 }

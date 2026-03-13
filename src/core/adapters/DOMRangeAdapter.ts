@@ -10,7 +10,7 @@
  * - 提供准确的文本位置定位能力
  */
 
-import type { IRangeAdapter, WrapOptions, ContainerTagConfig } from './IRangeAdapter';
+import type { IRangeAdapter, WrapOptions, ContainerTagConfig, TextIndex } from './IRangeAdapter';
 import { getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils';
 
 /** 容器到标签的映射配置（由上层服务通过 registerContainerConfig 动态注册） */
@@ -1532,8 +1532,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
     return [...this._container.querySelectorAll(selector)];
   }
 
-  getElementPosition(element: Element): { start: number; end: number } | null {
-    const { index, brIndex } = this._buildTextNodeData();
+  getElementPosition(element: Element, prebuiltIndex?: TextIndex): { start: number; end: number } | null {
+    const { index, brIndex } = prebuiltIndex || this._buildTextNodeData();
     return this._getPositionFromIndex(element, index, brIndex);
   }
 
@@ -1543,12 +1543,16 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * 与 Range.toString() 不同，此方法返回的位置与 getText/getDocumentLength 一致，
    * 正确计入每个叶子块末尾和 <br> 的虚拟换行符
    */
-  getDOMRangePosition(range: Range): { start: number; end: number } | null {
-    const { index, brIndex } = this._buildTextNodeData();
+  getDOMRangePosition(range: Range, prebuiltIndex?: TextIndex): { start: number; end: number } | null {
+    const { index, brIndex } = prebuiltIndex || this._buildTextNodeData();
     const start = this._nodeOffsetToPosition(range.startContainer, range.startOffset, index, brIndex);
     const end = this._nodeOffsetToPosition(range.endContainer, range.endOffset, index, brIndex);
     if (start === null || end === null) return null;
     return { start, end };
+  }
+
+  buildIndex(): TextIndex {
+    return this._buildTextNodeData();
   }
 
   /**
@@ -1607,5 +1611,14 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
   registerContainerConfig(name: string, config: ContainerTagConfig): void {
     registerContainerConfig(name, config);
+  }
+
+  getRegisteredConfigs(): Array<{ name: string; selector: string; idAttribute?: string; label?: string }> {
+    return Object.entries(CONTAINER_CONFIGS).map(([name, config]) => ({
+      name,
+      selector: configToSelector(config),
+      idAttribute: config.idAttribute,
+      label: config.label,
+    }));
   }
 }

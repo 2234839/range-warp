@@ -18,7 +18,7 @@
  * - 同一 revision ID 可对应多个 DOM 元素（跨块拆分场景）
  */
 
-import type { IRangeAdapter } from '../adapters/IRangeAdapter';
+import type { IRangeAdapter, TextIndex } from '../adapters/IRangeAdapter';
 import { Range } from './Range';
 
 /** 修订类型 */
@@ -78,19 +78,21 @@ export class Revision {
    * 支持跨块修订：同一 revision ID 可对应多个元素，
    * 合并所有元素的范围为一个 Range
    *
+   * @param prebuiltIndex 可选的预构建索引（批量操作时传入以复用）
    * @returns Range 实例
    */
-  getRange(): Range | null {
+  getRange(prebuiltIndex?: TextIndex): Range | null {
     const selector = this._getSelector();
     const elements = this._adapter.querySelectorAll(selector);
 
     if (elements.length === 0) return null;
 
+    const index = prebuiltIndex || this._adapter.buildIndex();
     let minStart = Infinity;
     let maxEnd = 0;
 
     for (const element of elements) {
-      const pos = this._adapter.getElementPosition(element);
+      const pos = this._adapter.getElementPosition(element, index);
       if (pos) {
         minStart = Math.min(minStart, pos.start);
         maxEnd = Math.max(maxEnd, pos.end);
@@ -262,6 +264,9 @@ export class Revision {
       `.${REVISION_INSERT_CLASS}, .${REVISION_DELETE_CLASS}`
     );
 
+    /* 一次性构建索引，避免循环内重复遍历 */
+    const prebuiltIndex = adapter.buildIndex();
+
     /* 单次遍历：按 ID 分组并计算范围边界，避免 N+1 查询 */
     const idRanges = new Map<string, { minStart: number; maxEnd: number; sampleElement: Element }>();
 
@@ -269,7 +274,7 @@ export class Revision {
       const id = element.getAttribute('data-revision-id');
       if (!id) continue;
 
-      const pos = adapter.getElementPosition(element);
+      const pos = adapter.getElementPosition(element, prebuiltIndex);
       if (!pos) continue;
 
       const existing = idRanges.get(id);

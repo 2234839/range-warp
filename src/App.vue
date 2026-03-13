@@ -3,6 +3,7 @@
   import { useStorage, useDebounceFn } from '@vueuse/core';
   import EditorCore from './components/EditorCore.vue';
   import DomTreePanel from './components/DomTreePanel.vue';
+  import ContainerTreePanel from './components/ContainerTreePanel.vue';
   import diff from 'fast-diff';
   import { getUnicodeStringLength, findElementByPath } from './core/utils';
 
@@ -53,14 +54,23 @@
   /** 触发保存 */
   const triggerSave = () => debouncedSave();
 
-  /** 当前激活的 Tab */
+  /** 当前激活的 Tab（右侧面板） */
   const activeTab = ref<'info' | 'bookmarks' | 'revisions'>('info');
 
-  /** Tab 配置 */
+  /** 右侧 Tab 配置 */
   const tabs: ReadonlyArray<{ key: typeof activeTab.value; label: string }> = [
     { key: 'info', label: '信息' },
     { key: 'bookmarks', label: '书签' },
     { key: 'revisions', label: '修订' },
+  ];
+
+  /** 当前激活的左侧 Tab */
+  const leftTab = ref<'dom' | 'container'>('dom');
+
+  /** 左侧 Tab 配置 */
+  const leftTabs: ReadonlyArray<{ key: typeof leftTab.value; label: string }> = [
+    { key: 'dom', label: 'DOM 树' },
+    { key: 'container', label: '容器树' },
   ];
 
   /** 当前选中的文本范围 */
@@ -285,12 +295,17 @@
     <!-- 主要内容区域 -->
     <main class="flex-1 p-2 min-h-0">
       <div class="flex gap-2 h-full">
-        <!-- 左侧：DOM 树面板 -->
+        <!-- 左侧：树面板 -->
         <div class="w-72 shrink-0 bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col min-h-0">
-          <div class="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
-            <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">DOM 树</h2>
+          <!-- 选项卡 -->
+          <div class="flex border-b border-gray-200">
+            <button v-for="tab in leftTabs" :key="tab.key" @click="leftTab = tab.key"
+              :class="['flex-1 px-3 py-2 text-xs font-medium transition-colors', leftTab === tab.key ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700']">
+              {{ tab.label }}
+            </button>
           </div>
-          <DomTreePanel :html="editorContent" @select="handleTreeSelect" />
+          <DomTreePanel v-if="leftTab === 'dom'" :html="editorContent" @select="handleTreeSelect" />
+          <ContainerTreePanel v-else :editor="editor" />
           <!-- 保存状态 -->
           <div class="px-4 py-2 border-t border-gray-200 text-xs flex items-center justify-between">
             <span v-if="saveStatusText" class="flex items-center gap-1 text-green-600">
