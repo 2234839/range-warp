@@ -534,7 +534,7 @@ const testCases: TestCase[] = [
     description: '跨块应用样式后块结构应保留',
   },
 
-  // ==================== 16. 嵌套样式部分移除（processElementForStyleRemoval 修复验证） ====================
+  // ==================== 16. 嵌套容器部分移除（splitPreservingAncestors 修复验证） ====================
   {
     name: '16.1 嵌套 em+strong 全量移除外层',
     initialHTML: '<strong><em>abcd</em></strong>',

@@ -152,7 +152,7 @@ export interface IRangeAdapter {
    * @param selector CSS 选择器 (可以是标签名或带属性的选择器)
    * @param style 可选的样式名称,用于精确匹配
    */
-  unwrapElement(start: number, end: number, selector: string, style?: string): void;
+  unwrapElement(start: number, end: number, selector: string, configName?: string): void;
 
   /**
    * 高亮显示指定范围

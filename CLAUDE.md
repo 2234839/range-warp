@@ -55,4 +55,9 @@ echo 'document.querySelector("[contenteditable]")?.innerHTML' > .dev-logs/pendin
 测试脚本也使用 ts 编写，放在 src/__tests__ 目录下
 可运行pnpm tsx src/__tests__/xxxx(对应的测试脚本).test.ts 来测试
 
+运行全量测试：
+```bash
+for f in src/__tests__/*.test.ts; do pnpm tsx "$f" 2>&1 | grep -E '通过率|失败' | head -2; done
+```
+
 一些核心需要测试的功能修改后都应该执行对应的测试，核心功能的ts文件顶部应该使用注释说明对应的测试脚本路径

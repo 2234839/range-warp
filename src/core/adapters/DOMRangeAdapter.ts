@@ -31,14 +31,14 @@ function getTagConfig(name: string): ContainerTagConfig | undefined {
 }
 
 /**
- * 检查元素是否是系统支持的样式标签
+ * 检查元素是否匹配已注册的容器配置
  * @param element DOM 元素
- * @param style 可选的样式名称,用于精确匹配
- * @returns 是否是支持的样式标签
+ * @param configName 可选的配置名称，用于精确匹配
+ * @returns 是否匹配已注册配置
  */
-function isSupportedStyleElement(element: Element, style?: string): boolean {
-  if (style) {
-    const config = getTagConfig(style);
+function isConfiguredElement(element: Element, configName?: string): boolean {
+  if (configName) {
+    const config = getTagConfig(configName);
     if (!config) return false;
 
     if (element.tagName.toLowerCase() !== config.tagName.toLowerCase()) {
@@ -131,18 +131,19 @@ function unwrapChildNodes(element: Element): void {
 }
 
 /**
- * 查找文本节点的直接样式祖先元素（不越过 outerBoundary）
- * @returns 样式祖先元素或 null
+ * 获取从 node 到 outerBoundary 之间的完整祖先链（不含 outerBoundary）
+ * 按从外到内的顺序返回，用于重建嵌套结构时保留全部中间层级
  */
-function findDirectStyledParent(node: Node, outerBoundary: Element): Element | null {
+function getAncestorChain(node: Node, outerBoundary: Element): Element[] {
+  const chain: Element[] = [];
   let current: Node | null = node.parentNode;
   while (current && current !== outerBoundary) {
-    if (isElementNode(current) && isSupportedStyleElement(current)) {
-      return current;
+    if (isElementNode(current)) {
+      chain.unshift(current);
     }
     current = current.parentNode;
   }
-  return null;
+  return chain;
 }
 
 /** 块级元素标签名集合 */
@@ -526,7 +527,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
         let currentParent: Node | null = node.parentNode;
 
         while (currentParent && currentParent !== this._container) {
-          if (isElementNode(currentParent) && isSupportedStyleElement(currentParent)) {
+          if (isElementNode(currentParent) && isConfiguredElement(currentParent)) {
             outermostStyleParent = currentParent;
           }
           currentParent = currentParent.parentNode;
@@ -776,9 +777,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
     }
   }
 
-  unwrapElement(start: number, end: number, selector: string, style?: string): void {
-    // 如果指定了样式名称,检查是否支持
-    if (style && !getTagConfig(style)) {
+  unwrapElement(start: number, end: number, selector: string, configName?: string): void {
+    if (configName && !getTagConfig(configName)) {
       return;
     }
 
@@ -787,7 +787,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
     for (const element of allTagElements) {
       if (!this._container.contains(element)) continue;
-      if (style && !isSupportedStyleElement(element, style)) continue;
+      if (configName && !isConfiguredElement(element, configName)) continue;
 
       const pos = this._getPositionFromIndex(element, index);
       if (!pos) continue;
@@ -804,12 +804,12 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 分割元素以处理部分样式移除
+   * 分割元素以处理部分容器移除
    *
    * 基本思路:
-   * 1. 创建移除范围的 Range
-   * 2. 提取 Range 的内容
-   * 3. 重建 DOM: 前段(保留样式) + 中段(纯文本) + 后段(保留样式)
+   * 1. 将元素按 removeStart/removeEnd 分为三段
+   * 2. 前段和后段保留外层包裹，中段移除外层包裹
+   * 3. cloneContents() 自动保留内部嵌套结构
    *
    * @param element 要分割的元素
    * @param elementStart 元素在文档中的起始位置
@@ -828,10 +828,10 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const offsetStart = Math.max(0, removeStart - elementStart);
     const offsetEnd = Math.min(getUnicodeStringLength(element.textContent || ''), removeEnd - elementStart);
 
-    const hasNestedStyles = this.hasNestedStyleElements(element);
-    const result = hasNestedStyles
-      ? this.processElementForStyleRemoval(element, offsetStart, offsetEnd)
-      : this.processSimpleElementRemoval(element, offsetStart, offsetEnd);
+    const hasNestedContainers = this._hasNestedConfiguredElements(element);
+    const result = hasNestedContainers
+      ? this._splitPreservingAncestors(element, offsetStart, offsetEnd)
+      : this._splitSimple(element, offsetStart, offsetEnd);
 
     if (result.hasChildNodes()) {
       element.replaceWith(result);
@@ -841,18 +841,16 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 检查元素是否有嵌套的样式元素
-   * @param element 元素
-   * @returns 是否有嵌套样式
+   * 检查元素是否有嵌套的已配置容器
    */
-  private hasNestedStyleElements(element: Element): boolean {
+  private _hasNestedConfiguredElements(element: Element): boolean {
     const walker = this._doc.createTreeWalker(
       element,
       NodeFilter.SHOW_ELEMENT,
       {
         acceptNode: (node) => {
           if (node === element) return NodeFilter.FILTER_SKIP;
-          return isElementNode(node) && isSupportedStyleElement(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+          return isElementNode(node) && isConfiguredElement(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
         }
       }
     );
@@ -861,30 +859,23 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 处理简单元素的样式移除（没有嵌套样式）
-   * @param element 元素
-   * @param removeStart 移除起始偏移
-   * @param removeEnd 移除结束偏移
-   * @returns DocumentFragment
+   * 分割简单元素（无嵌套容器），保留内部结构
    */
-  private processSimpleElementRemoval(element: Element, removeStart: number, removeEnd: number): DocumentFragment {
+  private _splitSimple(element: Element, removeStart: number, removeEnd: number): DocumentFragment {
     const fragment = this._doc.createDocumentFragment();
     const elementLength = getUnicodeStringLength(element.textContent || '');
     const removeFromStart = removeStart === 0;
     const removeToEnd = removeEnd === elementLength;
 
-    // 前段 (保留样式)
     if (!removeFromStart) {
       const beforeElement = element.cloneNode(false);
       const beforeRange = this.createRangeInRoot(element, 0, removeStart, false);
       if (beforeRange) {
-        const beforeContent = beforeRange.cloneContents();
-        beforeElement.appendChild(beforeContent);
+        beforeElement.appendChild(beforeRange.cloneContents());
         fragment.appendChild(beforeElement);
       }
     }
 
-    // 中段 (移除样式 - 纯文本)
     const middleRange = this.createRangeInRoot(element, removeStart, removeEnd, false);
     if (middleRange) {
       const middleText = middleRange.toString();
@@ -893,13 +884,11 @@ export class DOMRangeAdapter implements IRangeAdapter {
       }
     }
 
-    // 后段 (保留样式)
     if (!removeToEnd) {
       const afterElement = element.cloneNode(false);
       const afterRange = this.createRangeInRoot(element, removeEnd, elementLength, false);
       if (afterRange) {
-        const afterContent = afterRange.cloneContents();
-        afterElement.appendChild(afterContent);
+        afterElement.appendChild(afterRange.cloneContents());
         fragment.appendChild(afterElement);
       }
     }
@@ -908,69 +897,70 @@ export class DOMRangeAdapter implements IRangeAdapter {
   }
 
   /**
-   * 处理元素以移除部分样式，保留内部样式
-   * @param element 要处理的元素
-   * @param removeStart 要移除的起始偏移（相对于元素）
-   * @param removeEnd 要移除的结束偏移（相对于元素）
-   * @returns 处理后的 DocumentFragment
+   * 分割嵌套元素，保留完整祖先链结构
+   *
+   * 使用文本节点索引重建 DOM，通过克隆完整祖先链
+   * 保留从文本节点到外层元素之间的所有嵌套层级
    */
-  private processElementForStyleRemoval(element: Element, removeStart: number, removeEnd: number): DocumentFragment {
+  private _splitPreservingAncestors(element: Element, removeStart: number, removeEnd: number): DocumentFragment {
     const fragment = this._doc.createDocumentFragment();
     const removeFromStart = removeStart === 0;
     const removeToEnd = removeEnd === getUnicodeStringLength(element.textContent || '');
 
-    const textNodes = this.getTextNodesWithPositions(element);
+    const textNodes = this._getTextNodesInElement(element);
 
-    /**
-     * 将文本附加到容器中，保留内部样式父元素
-     */
-    const appendWithStyle = (container: Node, node: Text, text: string) => {
-      const styledParent = findDirectStyledParent(node, element);
-      if (styledParent) {
-        const cloned = styledParent.cloneNode(false);
-        cloned.textContent = text;
-        container.appendChild(cloned);
+    /** 将文本附加到容器中，保留从文本节点到外层元素之间的完整祖先链 */
+    const appendWithAncestors = (container: Node, node: Text, text: string) => {
+      const chain = getAncestorChain(node, element);
+      if (chain.length > 0) {
+        let current: Node = container;
+        for (const ancestor of chain) {
+          const cloned = ancestor.cloneNode(false);
+          current.appendChild(cloned);
+          current = cloned;
+        }
+        current.textContent = text;
       } else {
         container.appendChild(this._doc.createTextNode(text));
       }
     };
 
-    // 第一段：移除起始位置之前（保留外层样式和内部样式）
+    /* 前段：保留外层包裹 */
     if (!removeFromStart) {
       const beforeWrapper = element.cloneNode(false);
       for (const { node, nodeStart, nodeEnd } of textNodes) {
         if (nodeEnd <= removeStart) {
-          appendWithStyle(beforeWrapper, node, node.textContent || '');
+          appendWithAncestors(beforeWrapper, node, node.textContent || '');
         } else if (nodeStart < removeStart) {
           const utf16End = getUtf16Offset(node.textContent || '', removeStart - nodeStart);
-          appendWithStyle(beforeWrapper, node, (node.textContent || '').slice(0, utf16End));
+          appendWithAncestors(beforeWrapper, node, (node.textContent || '').slice(0, utf16End));
         }
       }
       fragment.appendChild(beforeWrapper);
     }
 
-    // 第二段：移除范围内的内容（移除外层样式，保留内部样式）
+    /* 中段：移除外层包裹，保留内部结构 */
     for (const { node, nodeStart, nodeEnd } of textNodes) {
       if (nodeStart >= removeStart && nodeEnd <= removeEnd) {
-        appendWithStyle(fragment, node, node.textContent || '');
+        appendWithAncestors(fragment, node, node.textContent || '');
       } else if (nodeStart < removeEnd && nodeEnd > removeStart) {
         const text = node.textContent || '';
         const unicodeLen = getUnicodeStringLength(text);
         const startInNode = Math.max(0, removeStart - nodeStart);
         const endInNode = Math.min(unicodeLen, removeEnd - nodeStart);
-        appendWithStyle(fragment, node, getUtf16Slice(text, startInNode, endInNode));
+        appendWithAncestors(fragment, node, getUtf16Slice(text, startInNode, endInNode));
       }
     }
 
-    // 第三段：移除结束位置之后（保留外层样式和内部样式）
+    /* 后段：保留外层包裹 */
     if (!removeToEnd) {
       const afterWrapper = element.cloneNode(false);
       for (const { node, nodeStart, nodeEnd } of textNodes) {
         if (nodeStart >= removeEnd) {
-          appendWithStyle(afterWrapper, node, node.textContent || '');
+          appendWithAncestors(afterWrapper, node, node.textContent || '');
         } else if (nodeEnd > removeEnd) {
           const utf16Start = getUtf16Offset(node.textContent || '', removeEnd - nodeStart);
-          appendWithStyle(afterWrapper, node, (node.textContent || '').slice(utf16Start));
+          appendWithAncestors(afterWrapper, node, (node.textContent || '').slice(utf16Start));
         }
       }
       fragment.appendChild(afterWrapper);
@@ -981,31 +971,19 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
   /**
    * 获取元素内所有文本节点及其相对位置
-   * @param element 元素
-   * @returns 文本节点及其位置信息
    */
-  private getTextNodesWithPositions(element: Element): Array<{ node: Text; nodeStart: number; nodeEnd: number }> {
+  private _getTextNodesInElement(element: Element): Array<{ node: Text; nodeStart: number; nodeEnd: number }> {
     const result: Array<{ node: Text; nodeStart: number; nodeEnd: number }> = [];
     let currentPos = 0;
 
-    const walker = this._doc.createTreeWalker(
-      element,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
+    const walker = this._doc.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
 
     let node;
-    /* TreeWalker(NodeFilter.SHOW_TEXT) 保证只返回文本节点，但 TS 类型声明为 Node | null，
-     * 这里用 as Text 声明实际类型，避免每次迭代都进行冗余的运行时 nodeType 检查 */
     while ((node = walker.nextNode() as Text)) {
       const text = node.textContent || '';
       const textLength = getUnicodeStringLength(text);
       if (textLength > 0) {
-        result.push({
-          node,
-          nodeStart: currentPos,
-          nodeEnd: currentPos + textLength
-        });
+        result.push({ node, nodeStart: currentPos, nodeEnd: currentPos + textLength });
         currentPos += textLength;
       }
     }
@@ -1158,7 +1136,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const allElements = this._container.querySelectorAll(selector);
     for (const element of allElements) {
       const parent = element.parentElement;
-      if (parent && isSupportedStyleElement(parent) &&
+      if (parent && isConfiguredElement(parent) &&
           isSameContainerType(element, parent)) {
         unwrapChildNodes(element);
         continue;
