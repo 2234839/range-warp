@@ -135,13 +135,17 @@
     let keyCounter = 0;
 
     for (const raw of rawMap.values()) {
-      const starts = raw.fragments.map(f => f.start);
-      const ends = raw.fragments.map(f => f.end);
+      let minStart = Infinity;
+      let maxEnd = 0;
+      for (const f of raw.fragments) {
+        if (f.start < minStart) minStart = f.start;
+        if (f.end > maxEnd) maxEnd = f.end;
+      }
       result.push({
         key: String(keyCounter++),
         configName: raw.configName,
-        start: Math.min(...starts),
-        end: Math.max(...ends),
+        start: minStart,
+        end: maxEnd,
         fragmentCount: raw.fragments.length,
       });
     }

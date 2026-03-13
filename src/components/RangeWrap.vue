@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, onMounted, onBeforeUnmount, useTemplateRef, readonly } from 'vue';
+  import { ref, nextTick, onMounted, onBeforeUnmount, useTemplateRef, readonly } from 'vue';
   import { useNativeEditor } from './useNativeEditor';
   import { EMPTY_FORMAT_STATE, STYLE_KEYS, TOOLBAR_BUTTONS, type FormatState } from './editor-utils';
 
@@ -72,7 +72,7 @@
     }
 
     emit('formatApply', rangeStart, rangeEnd, format);
-    setTimeout(updateFormatState, 0);
+    nextTick(updateFormatState);
   }
 
   /** 更新格式状态 */

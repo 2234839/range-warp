@@ -204,35 +204,43 @@
       }
     }
 
-    // 从后往前执行，避免位置偏移
-    for (const { type, text, position } of [...operations].reverse()) {
-
-      if (type === diff.EQUAL) {
-        continue;
+    /*
+     * 修正 INSERT 位置：当 INSERT 跟在 DELETE 后面（替换操作）时，
+     * INSERT 位置应为 DELETE 的结束位置，而非起始位置。
+     * 参考 setText 的设计：先标记删除修订，再在删除范围之后插入新文本。
+     * 这样插入的文本不会落入删除修订的包裹范围内。
+     */
+    for (let i = 0; i < operations.length; i++) {
+      if (operations[i].type === diff.INSERT && i > 0 && operations[i - 1].type === diff.DELETE) {
+        if (operations[i].position === operations[i - 1].position) {
+          operations[i].position = operations[i - 1].position + getUnicodeStringLength(operations[i - 1].text);
+        }
       }
+    }
 
+    // 先处理 DELETE（仅包裹文本，不改变文本内容），再从后向前处理 INSERT（会插入文本）
+    const deletes = operations.filter(o => o.type === diff.DELETE);
+    for (const { text, position } of [...deletes].reverse()) {
       const endPos = position + getUnicodeStringLength(text);
+      const range = ed.createRange(position, endPos);
+      ed.revisions.createDelete({
+        range,
+        author: 'current-user',
+        comment: '通过对比生成的删除修订',
+      });
+    }
 
-      if (type === diff.INSERT) {
-        // 插入操作：使用 Range 的 insertText
-        const range = ed.createRange(position, position);
-        range.insertText(text);
-        // 创建插入修订
-        const newRange = ed.createRange(position, endPos);
-        ed.revisions.createInsert({
-          range: newRange,
-          author: 'current-user',
-          comment: '通过对比生成的插入修订',
-        });
-      } else if (type === diff.DELETE) {
-        // 删除操作：创建删除修订
-        const range = ed.createRange(position, endPos);
-        ed.revisions.createDelete({
-          range,
-          author: 'current-user',
-          comment: '通过对比生成的删除修订',
-        });
-      }
+    const inserts = operations.filter(o => o.type === diff.INSERT);
+    for (const { text, position } of [...inserts].reverse()) {
+      const range = ed.createRange(position, position);
+      range.insertText(text);
+      const endPos = position + getUnicodeStringLength(text);
+      const newRange = ed.createRange(position, endPos);
+      ed.revisions.createInsert({
+        range: newRange,
+        author: 'current-user',
+        comment: '通过对比生成的插入修订',
+      });
     }
 
     // 清空输入框并隐藏
