@@ -16,10 +16,3 @@ export { default as RangeWrap } from './RangeWrap.vue';
 export { useNativeEditor } from './useNativeEditor';
 export { useUEditorPlus } from './useUEditorPlus';
 export type { EditorComposable, SelectionContext } from './editor-utils';
-
-// 组件类型定义
-export type ButtonSize = 'small' | 'medium' | 'large';
-export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'text';
-export type InputSize = 'small' | 'medium' | 'large';
-export type InputType = 'text' | 'number' | 'email' | 'password' | 'tel' | 'url';
-export type TextFormat = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'highlight';

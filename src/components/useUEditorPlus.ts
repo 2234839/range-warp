@@ -67,19 +67,30 @@ export function useUEditorPlus(options: UseUEditorPlusOptions): EditorComposable
       }
 
       /**
-       * 修补 UEditor 的 domUtils.hasClass：
-       * 当 toolbars: [] 时，内部 ColorButton 的 DOM 元素为 null，
-       * closeAllPopup 触发 hasClass(null) 会报错。
-       * 脚本加载后立即修补，确保跨模式切换也有效。
+       * 修补 UEditor 的 domUtils 方法，防止 null/undefined 参数导致崩溃：
+       * - hasClass: toolbars: [] 时 ColorButton 的 DOM 元素为 null
+       * - isEmptyBlock: destroy() 后内部定时器（autosave/undo save）仍触发，
+       *   此时 body 可能已被清空为 undefined
        */
       const UE = (window as any).UE;
-      if (UE?.dom?.domUtils?.hasClass && !UE.dom.domUtils.hasClass.__patched) {
-        const original = UE.dom.domUtils.hasClass;
-        UE.dom.domUtils.hasClass = (el: Element | null, cls: string) => {
-          if (!el) return false;
-          return original(el, cls);
-        };
-        UE.dom.domUtils.hasClass.__patched = true;
+      const du = UE?.dom?.domUtils;
+      if (du) {
+        if (du.hasClass && !du.hasClass.__patched) {
+          const original = du.hasClass;
+          du.hasClass = (el: Element | null, cls: string) => {
+            if (!el) return false;
+            return original(el, cls);
+          };
+          du.hasClass.__patched = true;
+        }
+        if (du.isEmptyBlock && !du.isEmptyBlock.__patched) {
+          const original = du.isEmptyBlock;
+          du.isEmptyBlock = (node: Node | null | undefined) => {
+            if (!node) return 1;
+            return original(node);
+          };
+          du.isEmptyBlock.__patched = true;
+        }
       }
     } catch {
       loading.value = false;
@@ -107,6 +118,8 @@ export function useUEditorPlus(options: UseUEditorPlusOptions): EditorComposable
       autoHeightEnabled: false,
       serverUrl: '',
       enableContextMenu: false,
+      /** 禁用 UEditor 自带的自动保存，我们通过 useStorage 自行管理内容持久化 */
+      enableAutoSave: false,
     });
 
     ueInstance.ready(() => {

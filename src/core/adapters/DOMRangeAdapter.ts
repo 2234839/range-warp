@@ -204,14 +204,10 @@ export function getNonCopyableSelector(): string {
 /** 块级元素选择器（从 BLOCK_TAG_NAMES 派生，另加 br 换行边界） */
 const BLOCK_SELECTOR = [...BLOCK_TAG_NAMES, 'br'].join(', ');
 
-/** 类型守卫：判断节点是否为文本节点（兼容跨 iframe 场景） */
-function isTextNode(node: Node): node is Text {
-  return node.nodeType === 3;
-}
 
 /** 类型守卫：判断节点是否为元素节点（兼容跨 iframe 场景） */
 function isElementNode(node: Node): node is Element {
-  return node.nodeType === 1;
+  return node.nodeType === Node.ELEMENT_NODE;
 }
 
 /**
@@ -942,8 +938,9 @@ export class DOMRangeAdapter implements IRangeAdapter {
     );
 
     let node;
-    while ((node = walker.nextNode())) {
-      if (!isTextNode(node)) continue;
+    /* TreeWalker(NodeFilter.SHOW_TEXT) 保证只返回文本节点，但 TS 类型声明为 Node | null，
+     * 这里用 as Text 声明实际类型，避免每次迭代都进行冗余的运行时 nodeType 检查 */
+    while ((node = walker.nextNode() as Text)) {
       const text = node.textContent || '';
       const textLength = getUnicodeStringLength(text);
       if (textLength > 0) {
@@ -971,8 +968,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
     let pos = 0;
     const walker = this._doc.createTreeWalker(this._container, NodeFilter.SHOW_TEXT);
     let node;
-    while ((node = walker.nextNode())) {
-      if (!isTextNode(node)) continue;
+    /* NodeFilter.SHOW_TEXT 保证返回文本节点，as Text 声明实际类型 */
+    while ((node = walker.nextNode() as Text)) {
       const len = getUnicodeStringLength(node.textContent || '');
       if (len > 0) {
         index.set(node, { start: pos, end: pos + len });
@@ -1001,8 +998,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
     let min = Infinity, max = 0;
     const walker = this._doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     let node;
-    while ((node = walker.nextNode())) {
-      if (!isTextNode(node)) continue;
+    /* NodeFilter.SHOW_TEXT 保证返回文本节点，as Text 声明实际类型 */
+    while ((node = walker.nextNode() as Text)) {
       const p = index.get(node);
       if (p) { min = Math.min(min, p.start); max = Math.max(max, p.end); }
     }

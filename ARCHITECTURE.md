@@ -197,10 +197,10 @@ adapter.createConfigElement('bookmark', {
 
 ### 选区持久化与恢复
 
-`EditorCore.vue` 维护 `persistentSelection`，在样式操作导致失焦后自动恢复选区位置：
+`EditorCore.vue` 维护 `currentSelection`，在样式操作导致失焦后自动恢复选区位置：
 
 ```
-用户选中文本 → 持久化选区 → 点击工具栏 → 操作样式 → 恢复选区
+用户选中文本 → 保存选区 → 点击工具栏 → 操作样式 → 恢复选区
 ```
 
 原生模式额外使用 CSS Custom Highlight API 可视化选区（iframe 模式下跳过，因跨 iframe 不支持）。
@@ -300,6 +300,7 @@ src/
 │   └── index.ts                # 路由配置
 ├── __tests__/                   # 测试目录
 │   ├── adapter.test.ts         # 适配器测试
+│   ├── bookmark.test.ts        # 书签功能测试
 │   ├── copy-cut.test.ts        # 复制/剪切清洗测试
 │   ├── revision.test.ts        # 修订模型测试
 │   ├── basic-test.test.ts      # 基础功能测试
@@ -333,6 +334,7 @@ composable 内部只需封装编辑器特有的逻辑，核心功能（样式、
 ```bash
 # 运行全部测试
 pnpm tsx src/__tests__/adapter.test.ts
+pnpm tsx src/__tests__/bookmark.test.ts
 pnpm tsx src/__tests__/copy-cut.test.ts
 pnpm tsx src/__tests__/revision.test.ts
 pnpm tsx src/__tests__/basic-test.test.ts

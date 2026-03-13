@@ -55,13 +55,6 @@
   /** 当前选区 */
   const currentSelection = ref({ start: 0, end: 0, text: '' });
 
-  /** 持久化的选区信息 */
-  const persistentSelection = ref<{
-    start: number;
-    end: number;
-    text: string;
-  } | null>(null);
-
   /** 编辑器是否拥有焦点 */
   const isEditorFocused = ref(false);
 
@@ -121,7 +114,7 @@
   });
 
   /**
-   * 从 DOM 中同步选区状态到持久化选区
+   * 从 DOM 中同步选区状态
    */
   function syncSelectionFromDOM() {
     const { ownerWindow, container } = active.value.selectionContext.value;
@@ -133,9 +126,8 @@
     const range = selection.getRangeAt(0);
     if (!container.contains(range.commonAncestorContainer)) return;
 
-    /* 编辑器内选区折叠 → 清除持久化选区 */
+    /* 编辑器内选区折叠 → 清除选区 */
     if (range.collapsed) {
-      persistentSelection.value = null;
       currentSelection.value = { start: 0, end: 0, text: '' };
       CSS.highlights?.delete('editor-selection');
       formatState.value = EMPTY_FORMAT_STATE;
@@ -143,13 +135,12 @@
       return;
     }
 
-    /* 编辑器内非折叠选区 → 更新持久化选区 */
+    /* 编辑器内非折叠选区 → 更新选区 */
     const pos = getSelectionPosition(container, ownerWindow);
     if (!pos) return;
 
     const text = range.toString();
     const selectionState = { start: pos.start, end: pos.end, text };
-    persistentSelection.value = selectionState;
     currentSelection.value = selectionState;
 
     /**
@@ -279,25 +270,35 @@
 
     setStyle(style, !formatState.value[styleKey]);
 
-    /* 样式操作后，恢复编辑器焦点并尝试恢复选区 */
+    /* 样式操作后，恢复编辑器焦点并尝试恢复选区
+     * 在 focus() 前保存位置，因为 focus() 可能同步触发 onFocus → syncSelectionFromDOM，
+     * 后者在原生选区已折叠时会清空 currentSelection */
     const { container } = active.value.selectionContext.value;
     if (container) {
+      const { start, end } = currentSelection.value;
       container.focus();
-      if (persistentSelection.value) {
-        restoreNativeSelection();
+      if (start !== end) {
+        restoreNativeSelection(start, end);
       }
     }
   }
 
   /**
-   * 根据持久化选区恢复原生选区
+   * 恢复原生选区
+   *
+   * @param start 起始位置（若不传则从 currentSelection 读取）
+   * @param end 结束位置（若不传则从 currentSelection 读取）
    */
-  function restoreNativeSelection() {
+  function restoreNativeSelection(start?: number, end?: number) {
     const ed = activeEditor.value;
     const { container } = active.value.selectionContext.value;
-    if (!container || !persistentSelection.value || !ed) return;
+    if (!container || !ed) return;
 
-    ed.createRange(persistentSelection.value.start, persistentSelection.value.end).select();
+    const s = start ?? currentSelection.value.start;
+    const e = end ?? currentSelection.value.end;
+    if (s === e) return;
+
+    ed.createRange(s, e).select();
   }
 
   /**
@@ -309,7 +310,6 @@
     toggleStyle,
     getHTML: () => active.value.getHTML(),
     setHTML: (html: string) => active.value.setHTML(html),
-    persistentSelection,
     currentSelection,
     formatState,
     /** 当前编辑器容器（contenteditable div 或 iframe body） */

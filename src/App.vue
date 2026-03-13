@@ -65,7 +65,7 @@
 
   /** 当前选中的文本范围 */
   const selectedRange = computed(() => {
-    return editorCoreRef.value?.persistentSelection || { start: 0, end: 0, text: '' };
+    return editorCoreRef.value?.currentSelection || { start: 0, end: 0, text: '' };
   });
 
   /** 是否有选中文本 */
