@@ -376,8 +376,9 @@ export class RevisionService {
    */
   private _resolveAll(isAccept: boolean): number {
     const revisions = this.query();
-    for (const revision of revisions) {
-      isAccept ? revision.accept() : revision.reject();
+    /* 从后向前处理，避免文本删除导致后续修订位置偏移 */
+    for (let i = revisions.length - 1; i >= 0; i--) {
+      isAccept ? revisions[i].accept() : revisions[i].reject();
     }
     this.refresh();
     return revisions.length;

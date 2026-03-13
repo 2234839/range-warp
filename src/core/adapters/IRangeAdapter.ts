@@ -239,11 +239,14 @@ export interface IRangeAdapter {
   sanitizeHTML(html: string): string;
 
   /**
-   * 查询范围内已配置元素的配置名集合
+   * 查询范围内所有已配置容器的配置名集合
+   *
+   * 查询所有通过 registerContainerConfig 注册的容器类型，
+   * 包括行内样式（bold/italic 等）和语义容器（bookmark/revision 等）
    *
    * @param start 范围起始（Unicode 字符位置）
    * @param end 范围结束（Unicode 字符位置）
-   * @returns 配置名集合（如 'bold', 'bookmark'）
+   * @returns 配置名集合（如 'bold', 'bookmark', 'revision-insert'）
    */
   queryConfigs(start: number, end: number): Set<string>;
 

@@ -57,7 +57,14 @@ export class StyleService {
 
   /** 查询范围内存在的样式 */
   getStylesInRange(start: number, end: number): Set<string> {
-    return this._adapter.queryConfigs(start, end);
+    const all = this._adapter.queryConfigs(start, end);
+    const result = new Set<string>();
+    for (const name of all) {
+      if (SUPPORTED_STYLE_NAMES.has(name)) {
+        result.add(name);
+      }
+    }
+    return result;
   }
 
   /** 获取格式化状态 */

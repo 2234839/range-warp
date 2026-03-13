@@ -16,21 +16,11 @@ import { getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils'
 /** 容器到标签的映射配置（由上层服务通过 registerContainerConfig 动态注册） */
 const CONTAINER_CONFIGS: Record<string, ContainerTagConfig> = {};
 
-/** 缓存的选择器字符串 */
-let _cachedStyleSelector = '';
-let _cachedTagToConfigName: Map<string, string> | null = null;
-
-function _invalidateConfigCache(): void {
-  _cachedStyleSelector = '';
-  _cachedTagToConfigName = null;
-}
-
 /**
  * 注册容器配置
  */
 export function registerContainerConfig(name: string, config: ContainerTagConfig): void {
   CONTAINER_CONFIGS[name] = config;
-  _invalidateConfigCache();
 }
 
 /**
@@ -120,30 +110,6 @@ function configToSelector(config: ContainerTagConfig): string {
 /** 构建所有已注册容器的 CSS 选择器（逗号分隔） */
 function buildContainerSelector(): string {
   return Object.values(CONTAINER_CONFIGS).map(configToSelector).join(',');
-}
-
-/** 构建纯样式标签选择器（不含 attributeSelector 的配置，如 bold、italic） */
-function buildStyleSelector(): string {
-  if (!_cachedStyleSelector) {
-    _cachedStyleSelector = Object.values(CONTAINER_CONFIGS)
-      .filter(config => !config.attributeSelector)
-      .map(configToSelector)
-      .join(',');
-  }
-  return _cachedStyleSelector;
-}
-
-/** 构建标签名到配置名的映射（如 'strong' → 'bold'） */
-function buildTagToConfigName(): Map<string, string> {
-  if (!_cachedTagToConfigName) {
-    _cachedTagToConfigName = new Map();
-    for (const [name, config] of Object.entries(CONTAINER_CONFIGS)) {
-      if (!config.attributeSelector) {
-        _cachedTagToConfigName.set(config.tagName.toLowerCase(), name);
-      }
-    }
-  }
-  return _cachedTagToConfigName;
 }
 
 /** extract + insert 包裹：从 range 中提取内容放入 wrapper，再插回原位 */
@@ -491,23 +457,22 @@ export class DOMRangeAdapter implements IRangeAdapter {
     const config = getTagConfig(configName);
     if (!config) return;
 
-    // 标准化选区
+    /* 标准化选区 */
     [start, end] = this.normalizeRange(start, end);
 
-    // 对于 inline 样式，检查是否跨段落或跨换行
+    /* 对于 inline 样式，检查是否跨段落或跨换行 */
     if (config.display === 'inline' || !config.display) {
       const { snapshot, index, brIndex } = this._buildTextNodeData();
 
-      /** 检测是否有块级元素或范围内的 <br> 换行 */
       const hasBlocks = this._collectBlocksInRange(start, end, index, brIndex).length > 0;
       const hasBR = [...brIndex.values()].some(pos => pos > start && pos < end);
       if (hasBlocks || hasBR) {
-        this._applyStyleAcrossBlocksWithData(start, end, config, snapshot, index);
+        this._applyStyleAcrossBlocksWithData(start, end, configName, snapshot, index);
         return;
       }
     }
 
-    this.wrapElement(start, end, () => this._doc.createElement(config.tagName));
+    this.wrapElement(start, end, () => this.createConfigElement(configName));
   }
 
   /**
@@ -539,7 +504,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * - 否则 → extract 指定文本范围并包裹
    */
   private _applyStyleAcrossBlocksWithData(
-    start: number, end: number, config: ContainerTagConfig,
+    start: number, end: number, configName: string,
     snapshot: Array<{ node: Text; nodeStart: number; nodeEnd: number }>,
     index: Map<Text, { start: number; end: number }>,
   ): void {
@@ -554,7 +519,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
         const offsetStart = overlapStart - nodeStart;
         const offsetEnd = overlapEnd - nodeStart;
 
-        const newElement = this._doc.createElement(config.tagName);
+        const newElement = this.createConfigElement(configName);
 
         /** 查找文本节点的最外层样式祖先 */
         let outermostStyleParent: Element | null = null;
@@ -1326,15 +1291,14 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
   queryConfigs(start: number, end: number): Set<string> {
     const result = new Set<string>();
-    const selector = buildStyleSelector();
-    const tagToConfig = buildTagToConfigName();
+    const selector = buildContainerSelector();
     const index = this._buildIndex();
 
     const elements = this._container.querySelectorAll(selector);
     for (const element of elements) {
       const pos = this._getPositionFromIndex(element, index);
       if (pos && pos.start < end && pos.end > start) {
-        const configName = tagToConfig.get(element.tagName.toLowerCase());
+        const configName = getConfigNameForElement(element);
         if (configName) {
           result.add(configName);
         }
@@ -1406,7 +1370,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * 按 ID 分组后检测非连续性，根据策略执行 fill-gaps 或 keep-largest
    */
   repairSplitContainers(): void {
-    for (const config of Object.values(CONTAINER_CONFIGS)) {
+    for (const [configName, config] of Object.entries(CONTAINER_CONFIGS)) {
       if (!config.idAttribute || config.splitRepair === 'none' || !config.splitRepair) continue;
 
       const selector = configToSelector(config);
@@ -1440,7 +1404,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
 
         if (this._hasGaps(groupElements)) {
           if (config.splitRepair === 'fill-gaps') {
-            this._fillGaps(groupElements, config, id);
+            this._fillGaps(groupElements, configName, config, id);
           } else if (config.splitRepair === 'keep-largest') {
             this._keepLargest(groupElements);
           }
@@ -1487,7 +1451,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
   /**
    * 填充间隙：将逻辑范围内未包裹的文本节点包裹为同类型元素
    */
-  private _fillGaps(elements: Element[], config: ContainerTagConfig, id: string): void {
+  private _fillGaps(elements: Element[], configName: string, config: ContainerTagConfig, id: string): void {
     const { snapshot, index } = this._buildTextNodeData();
 
     /* 从索引计算逻辑范围 */
@@ -1529,11 +1493,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
         localRange.setStart(node, getUtf16Offset(text, overlapStart - nodeStart));
         localRange.setEnd(node, getUtf16Offset(text, overlapEnd - nodeStart));
 
-        const wrapper = this._doc.createElement(config.tagName);
-        if (config.attributeSelector) {
-          const className = config.attributeSelector.replace(/^\./, '');
-          wrapper.className = className;
-        }
+        const wrapper = this.createConfigElement(configName);
         wrapper.setAttribute(idAttr, id);
 
         wrapRangeContents(localRange, wrapper);
