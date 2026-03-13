@@ -217,10 +217,20 @@ export class Editor {
   }
 
   /**
-   * 移除样式
+   * 移除样式（仅限内置样式：bold/italic/underline 等）
    */
   removeStyle(start: number, end: number, style: string): void {
     this.styles.removeStyle(start, end, style);
+  }
+
+  /**
+   * 移除已注册容器的包裹（适用于所有已注册的容器类型）
+   *
+   * 与 removeStyle 不同，此方法不限制容器类型，
+   * 可移除任何通过 registerContainerConfig 注册的容器（包括 bookmark、revision 等）
+   */
+  removeContainer(start: number, end: number, configName: string): void {
+    this._adapter.removeConfig(start, end, configName);
   }
 
   /**

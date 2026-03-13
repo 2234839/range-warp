@@ -3,7 +3,7 @@
   import { useStorage, useDebounceFn } from '@vueuse/core';
   import EditorCore from './components/EditorCore.vue';
   import DomTreePanel from './components/DomTreePanel.vue';
-  import ContainerTreePanel from './components/ContainerTreePanel.vue';
+  import ContainerCoveragePanel from './components/ContainerCoveragePanel.vue';
   import diff from 'fast-diff';
   import { getUnicodeStringLength, findElementByPath } from './core/utils';
 
@@ -70,7 +70,7 @@
   /** 左侧 Tab 配置 */
   const leftTabs: ReadonlyArray<{ key: typeof leftTab.value; label: string }> = [
     { key: 'dom', label: 'DOM 树' },
-    { key: 'container', label: '容器树' },
+    { key: 'container', label: '容器覆盖' },
   ];
 
   /** 当前选中的文本范围 */
@@ -305,7 +305,7 @@
             </button>
           </div>
           <DomTreePanel v-if="leftTab === 'dom'" :html="editorContent" @select="handleTreeSelect" />
-          <ContainerTreePanel v-else :editor="editor" />
+          <ContainerCoveragePanel v-else :editor="editor" :html="editorContent" />
           <!-- 保存状态 -->
           <div class="px-4 py-2 border-t border-gray-200 text-xs flex items-center justify-between">
             <span v-if="saveStatusText" class="flex items-center gap-1 text-green-600">
