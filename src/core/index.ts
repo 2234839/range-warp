@@ -4,12 +4,12 @@
  * 架构说明：
  * 1. 适配器层：IRangeAdapter 接口 + DOMRangeAdapter 实现
  * 2. 模型层：Range, Bookmark, Revision
- * 3. 服务层：BookmarkService, RevisionService
+ * 3. 服务层：StyleService, BookmarkService, RevisionService
  * 4. 应用层：Editor
  */
 
 // 适配器层
-export { DOMRangeAdapter, BLOCK_TAG_NAMES, getNonCopyableSelector } from './adapters/DOMRangeAdapter';
+export { DOMRangeAdapter, registerContainerConfig, BLOCK_TAG_NAMES, getNonCopyableSelector } from './adapters/DOMRangeAdapter';
 export type { DOMRangeAdapterOptions } from './adapters/DOMRangeAdapter';
 export type { IRangeAdapter, ContainerTagConfig, WrapOptions } from './adapters/IRangeAdapter';
 
@@ -24,6 +24,8 @@ export { Revision, RevisionType } from './models/Revision';
 export type { RevisionOptions, RevisionMetadata } from './models/Revision';
 
 // 服务层
+export { StyleService } from './services/StyleService';
+
 export { BookmarkService } from './services/BookmarkService';
 export type { CreateBookmarkOptions, QueryBookmarkOptions } from './services/BookmarkService';
 

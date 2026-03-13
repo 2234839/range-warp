@@ -15,7 +15,7 @@
  */
 
 import { JSDOM } from 'jsdom';
-import { DOMRangeAdapter } from '../core/adapters/DOMRangeAdapter.js';
+import { DOMRangeAdapter, registerContainerConfig } from '../core/adapters/DOMRangeAdapter.js';
 import { RevisionService } from '../core/services/RevisionService.js';
 import { Range } from '../core/models/Range.js';
 
@@ -72,6 +72,12 @@ function createEnv(html: string) {
   const container = document.createElement('div');
   container.innerHTML = html;
   const adapter = new DOMRangeAdapter({ container });
+  /** 注册标准样式配置（使 normalize 能识别 <strong>/<em> 等元素） */
+  adapter.registerContainerConfig('bold', { tagName: 'strong', display: 'inline' });
+  adapter.registerContainerConfig('italic', { tagName: 'em', display: 'inline' });
+  adapter.registerContainerConfig('underline', { tagName: 'u', display: 'inline' });
+  adapter.registerContainerConfig('strikethrough', { tagName: 's', display: 'inline' });
+  adapter.registerContainerConfig('highlight', { tagName: 'mark', display: 'inline' });
   const service = new RevisionService(adapter);
   const createRange = (start: number, end: number) =>
     new Range({ start, end, adapter });

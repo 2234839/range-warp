@@ -80,6 +80,13 @@ function nextId(prefix = 'bm') {
   return `${prefix}-${++idCounter}`;
 }
 
+/* ==================== 注册标准样式配置 ==================== */
+registerContainerConfig('bold', { tagName: 'strong', display: 'inline' });
+registerContainerConfig('italic', { tagName: 'em', display: 'inline' });
+registerContainerConfig('underline', { tagName: 'u', display: 'inline' });
+registerContainerConfig('strikethrough', { tagName: 's', display: 'inline' });
+registerContainerConfig('highlight', { tagName: 'mark', display: 'inline' });
+
 /* ==================== 1. fill-gaps: 不触发修复的场景 ==================== */
 
 console.log('\n=== 1. fill-gaps: 不触发修复的场景 ===');

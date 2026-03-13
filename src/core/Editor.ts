@@ -12,6 +12,7 @@ import type { IRangeAdapter } from './adapters/IRangeAdapter';
 import { Range } from './models/Range';
 import { BookmarkService, type CreateBookmarkOptions } from './services/BookmarkService';
 import { RevisionService } from './services/RevisionService';
+import { StyleService } from './services/StyleService';
 import { getUnicodeStringLength } from './utils';
 
 export interface EditorOptions {
@@ -39,10 +40,13 @@ export class Editor {
   readonly bookmarks: BookmarkService;
   /** 修订服务 */
   readonly revisions: RevisionService;
+  /** 样式服务 */
+  readonly styles: StyleService;
 
   constructor(options: EditorOptions) {
     this._adapter = options.adapter;
     this.currentUser = options.currentUser || 'anonymous';
+    this.styles = new StyleService(this._adapter);
     this.bookmarks = new BookmarkService(this._adapter);
     this.revisions = new RevisionService(this._adapter);
   }
@@ -207,22 +211,29 @@ export class Editor {
 
   /**
    * 应用样式
-   * @param start 起始位置
-   * @param end 结束位置
-   * @param style 样式类型
    */
   applyStyle(start: number, end: number, style: string): void {
-    this._adapter.setStyle(start, end, style);
+    this.styles.setStyle(start, end, style);
   }
 
   /**
    * 移除样式
-   * @param start 起始位置
-   * @param end 结束位置
-   * @param style 样式类型
    */
   removeStyle(start: number, end: number, style: string): void {
-    this._adapter.removeStyle(start, end, style);
+    this.styles.removeStyle(start, end, style);
+  }
+
+  /**
+   * 获取指定范围内的格式状态
+   */
+  getFormatState(start: number, end: number): {
+    bold: boolean;
+    italic: boolean;
+    underline: boolean;
+    strikethrough: boolean;
+    highlight: boolean;
+  } {
+    return this.styles.getFormatState(start, end);
   }
 
   /**
@@ -233,29 +244,6 @@ export class Editor {
    */
   getText(start: number, end: number): string {
     return this._adapter.getText(start, end);
-  }
-
-  /**
-   * 获取指定范围内的格式状态
-   * @param start 起始位置
-   * @param end 结束位置
-   * @returns 格式状态对象
-   */
-  getFormatState(start: number, end: number): {
-    bold: boolean;
-    italic: boolean;
-    underline: boolean;
-    strikethrough: boolean;
-    highlight: boolean;
-  } {
-    const styleMap = this._adapter.getStylesInRange(start, end);
-    return {
-      bold: styleMap.has('bold'),
-      italic: styleMap.has('italic'),
-      underline: styleMap.has('underline'),
-      strikethrough: styleMap.has('strikethrough'),
-      highlight: styleMap.has('highlight'),
-    };
   }
 
   /**

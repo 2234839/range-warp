@@ -28,6 +28,13 @@ global.Text = dom.window.Text;
 global.Range = dom.window.Range;
 global.NodeFilter = dom.window.NodeFilter;
 
+/* 注册标准样式配置 */
+registerContainerConfig('bold', { tagName: 'strong', display: 'inline' });
+registerContainerConfig('italic', { tagName: 'em', display: 'inline' });
+registerContainerConfig('underline', { tagName: 'u', display: 'inline' });
+registerContainerConfig('strikethrough', { tagName: 's', display: 'inline' });
+registerContainerConfig('highlight', { tagName: 'mark', display: 'inline' });
+
 function normalizeHTML(html: string): string {
   return html.replace(/\s+/g, '').replace(/>\s+</g, '><');
 }
@@ -143,7 +150,7 @@ const testCases: TestCase[] = [
     name: '3.1 加粗文本上再加斜体',
     initialHTML: '<strong>hello</strong>',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 5, 'italic');
+      adapter.applyConfig(0, 5, 'italic');
     },
     start: 0,
     end: 5,
@@ -154,7 +161,7 @@ const testCases: TestCase[] = [
     name: '3.2 部分覆盖加粗',
     initialHTML: '<strong>hello world</strong>',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 5, 'italic');
+      adapter.applyConfig(0, 5, 'italic');
     },
     start: 0,
     end: 5,
@@ -167,7 +174,7 @@ const testCases: TestCase[] = [
     name: '4.1 完全移除样式',
     initialHTML: '<strong>hello</strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 5, 'bold');
+      adapter.removeConfig(0, 5, 'bold');
     },
     start: 0,
     end: 5,
@@ -178,7 +185,7 @@ const testCases: TestCase[] = [
     name: '4.2 部分移除样式',
     initialHTML: '<strong>hello</strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 3, 'bold');
+      adapter.removeConfig(0, 3, 'bold');
     },
     start: 0,
     end: 3,
@@ -189,7 +196,7 @@ const testCases: TestCase[] = [
     name: '4.3 移除不存在的样式不应改变 DOM',
     initialHTML: '<strong>hello</strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 5, 'italic');
+      adapter.removeConfig(0, 5, 'italic');
     },
     start: 0,
     end: 5,
@@ -202,7 +209,7 @@ const testCases: TestCase[] = [
     name: '5.1 加粗+斜体交叉区域',
     initialHTML: '<strong><em>bold-italic</em></strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 11, 'bold');
+      adapter.removeConfig(0, 11, 'bold');
     },
     start: 0,
     end: 11,
@@ -213,7 +220,7 @@ const testCases: TestCase[] = [
     name: '5.2 加粗+斜体部分区域移除',
     initialHTML: '<strong><em>abc</em><em>def</em></strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 3, 'bold');
+      adapter.removeConfig(0, 3, 'bold');
     },
     start: 0,
     end: 3,
@@ -226,7 +233,7 @@ const testCases: TestCase[] = [
     name: '6.1 空范围应用样式不应改变 DOM',
     initialHTML: 'hello',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 0, 'bold');
+      adapter.applyConfig(0, 0, 'bold');
     },
     start: 0,
     end: 0,
@@ -237,7 +244,7 @@ const testCases: TestCase[] = [
     name: '6.2 起始位置应用样式',
     initialHTML: 'hello world',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 1, 'bold');
+      adapter.applyConfig(0, 1, 'bold');
     },
     start: 0,
     end: 1,
@@ -248,7 +255,7 @@ const testCases: TestCase[] = [
     name: '6.3 末尾位置应用样式',
     initialHTML: 'hello world',
     operation: (adapter, start, end) => {
-      adapter.setStyle(10, 11, 'bold');
+      adapter.applyConfig(10, 11, 'bold');
     },
     start: 10,
     end: 11,
@@ -259,7 +266,7 @@ const testCases: TestCase[] = [
     name: '6.4 全选后应用样式',
     initialHTML: 'hello world',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 11, 'bold');
+      adapter.applyConfig(0, 11, 'bold');
     },
     start: 0,
     end: 11,
@@ -272,7 +279,7 @@ const testCases: TestCase[] = [
     name: '7.1 跨段落应用样式',
     initialHTML: 'line1<div>line2</div>line3',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 18, 'bold');
+      adapter.applyConfig(0, 18, 'bold');
     },
     start: 0,
     end: 18,
@@ -357,7 +364,7 @@ const testCases: TestCase[] = [
     name: '10.1 无样式范围返回空集合',
     initialHTML: 'hello',
     operation: (adapter, start, end) => {
-      const styles = adapter.getStylesInRange(0, 5);
+      const styles = adapter.queryConfigs(0, 5);
       if (styles.size !== 0) throw new Error(`Expected empty set, got ${[...styles]}`);
     },
     start: 0,
@@ -369,7 +376,7 @@ const testCases: TestCase[] = [
     name: '10.2 加粗范围返回 bold',
     initialHTML: '<strong>hello</strong>',
     operation: (adapter, start, end) => {
-      const styles = adapter.getStylesInRange(0, 5);
+      const styles = adapter.queryConfigs(0, 5);
       if (!styles.has('bold')) throw new Error(`Expected bold in set, got ${[...styles]}`);
     },
     start: 0,
@@ -381,7 +388,7 @@ const testCases: TestCase[] = [
     name: '10.3 多种样式范围返回多个',
     initialHTML: '<strong><em>hi</em></strong>',
     operation: (adapter, start, end) => {
-      const styles = adapter.getStylesInRange(0, 2);
+      const styles = adapter.queryConfigs(0, 2);
       if (!styles.has('bold') || !styles.has('italic')) throw new Error(`Expected bold+italic, got ${[...styles]}`);
     },
     start: 0,
@@ -393,7 +400,7 @@ const testCases: TestCase[] = [
     name: '10.4 部分样式范围只返回匹配的样式',
     initialHTML: '<strong>a</strong><em>b</em>',
     operation: (adapter, start, end) => {
-      const styles = adapter.getStylesInRange(0, 1);
+      const styles = adapter.queryConfigs(0, 1);
       if (!styles.has('bold')) throw new Error(`Expected bold, got ${[...styles]}`);
       if (styles.has('italic')) throw new Error(`Should not have italic, got ${[...styles]}`);
     },
@@ -478,9 +485,9 @@ const testCases: TestCase[] = [
     name: '14.1 反复应用和移除样式',
     initialHTML: 'hello',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 5, 'bold');
+      adapter.applyConfig(0, 5, 'bold');
       adapter.normalize(0, 5);
-      adapter.removeStyle(0, 5, 'bold');
+      adapter.removeConfig(0, 5, 'bold');
     },
     start: 0,
     end: 5,
@@ -491,9 +498,9 @@ const testCases: TestCase[] = [
     name: '14.2 切换不同样式',
     initialHTML: 'hello',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 5, 'bold');
-      adapter.removeStyle(0, 5, 'bold');
-      adapter.setStyle(0, 5, 'italic');
+      adapter.applyConfig(0, 5, 'bold');
+      adapter.removeConfig(0, 5, 'bold');
+      adapter.applyConfig(0, 5, 'italic');
     },
     start: 0,
     end: 5,
@@ -519,7 +526,7 @@ const testCases: TestCase[] = [
     name: '15.2 跨块应用样式保留块结构',
     initialHTML: 'a<div>b</div>c',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 5, 'bold');
+      adapter.applyConfig(0, 5, 'bold');
     },
     start: 0,
     end: 5,
@@ -532,7 +539,7 @@ const testCases: TestCase[] = [
     name: '16.1 嵌套 em+strong 全量移除外层',
     initialHTML: '<strong><em>abcd</em></strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 4, 'bold');
+      adapter.removeConfig(0, 4, 'bold');
     },
     start: 0,
     end: 4,
@@ -543,7 +550,7 @@ const testCases: TestCase[] = [
     name: '16.2 嵌套 em+strong 移除中间部分',
     initialHTML: '<strong><em>abcd</em></strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(1, 3, 'bold');
+      adapter.removeConfig(1, 3, 'bold');
     },
     start: 0,
     end: 4,
@@ -554,7 +561,7 @@ const testCases: TestCase[] = [
     name: '16.3 三层嵌套移除最外层',
     initialHTML: '<strong><em><u>text</u></em></strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 4, 'bold');
+      adapter.removeConfig(0, 4, 'bold');
     },
     start: 0,
     end: 4,
@@ -565,7 +572,7 @@ const testCases: TestCase[] = [
     name: '16.4 三层嵌套移除中间层',
     initialHTML: '<strong><em><u>text</u></em></strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 4, 'italic');
+      adapter.removeConfig(0, 4, 'italic');
     },
     start: 0,
     end: 4,
@@ -578,7 +585,7 @@ const testCases: TestCase[] = [
     name: '17.1 部分移除后相邻相同标签',
     initialHTML: '<em>a</em><em>b</em>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 1, 'bold');
+      adapter.removeConfig(0, 1, 'bold');
       adapter.normalize(0, 4);
     },
     start: 0,
@@ -592,9 +599,9 @@ const testCases: TestCase[] = [
     name: '18.1 三种样式叠加',
     initialHTML: 'hello',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 5, 'bold');
-      adapter.setStyle(0, 5, 'italic');
-      adapter.setStyle(0, 5, 'underline');
+      adapter.applyConfig(0, 5, 'bold');
+      adapter.applyConfig(0, 5, 'italic');
+      adapter.applyConfig(0, 5, 'underline');
     },
     start: 0,
     end: 5,
@@ -605,8 +612,8 @@ const testCases: TestCase[] = [
     name: '18.2 部分区域叠加样式',
     initialHTML: 'abcde',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 5, 'bold');
-      adapter.setStyle(0, 3, 'italic');
+      adapter.applyConfig(0, 5, 'bold');
+      adapter.applyConfig(0, 3, 'italic');
     },
     start: 0,
     end: 5,
@@ -619,7 +626,7 @@ const testCases: TestCase[] = [
     name: '19.1 中文文本样式',
     initialHTML: '你好世界',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 2, 'bold');
+      adapter.applyConfig(0, 2, 'bold');
     },
     start: 0,
     end: 4,
@@ -630,7 +637,7 @@ const testCases: TestCase[] = [
     name: '19.2 中文部分移除样式',
     initialHTML: '<strong>你好世界</strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(2, 4, 'bold');
+      adapter.removeConfig(2, 4, 'bold');
     },
     start: 0,
     end: 4,
@@ -656,7 +663,7 @@ const testCases: TestCase[] = [
     name: '20.1 空容器设置样式',
     initialHTML: '<div></div>',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 0, 'bold');
+      adapter.applyConfig(0, 0, 'bold');
     },
     start: 0,
     end: 0,
@@ -667,7 +674,7 @@ const testCases: TestCase[] = [
     name: '20.2 只有空标签的容器',
     initialHTML: '<strong></strong>',
     operation: (adapter, start, end) => {
-      adapter.removeStyle(0, 0, 'bold');
+      adapter.removeConfig(0, 0, 'bold');
     },
     start: 0,
     end: 0,
@@ -680,12 +687,12 @@ const testCases: TestCase[] = [
     name: '21.1 连续设置不同样式然后全部移除',
     initialHTML: 'test',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 4, 'bold');
-      adapter.setStyle(0, 4, 'italic');
-      adapter.setStyle(0, 4, 'underline');
-      adapter.removeStyle(0, 4, 'bold');
-      adapter.removeStyle(0, 4, 'italic');
-      adapter.removeStyle(0, 4, 'underline');
+      adapter.applyConfig(0, 4, 'bold');
+      adapter.applyConfig(0, 4, 'italic');
+      adapter.applyConfig(0, 4, 'underline');
+      adapter.removeConfig(0, 4, 'bold');
+      adapter.removeConfig(0, 4, 'italic');
+      adapter.removeConfig(0, 4, 'underline');
     },
     start: 0,
     end: 4,
@@ -696,9 +703,9 @@ const testCases: TestCase[] = [
     name: '21.2 交叉设置和移除',
     initialHTML: 'abcdef',
     operation: (adapter, start, end) => {
-      adapter.setStyle(0, 6, 'bold');
-      adapter.removeStyle(2, 4, 'bold');
-      adapter.setStyle(2, 4, 'italic');
+      adapter.applyConfig(0, 6, 'bold');
+      adapter.removeConfig(2, 4, 'bold');
+      adapter.applyConfig(2, 4, 'italic');
     },
     start: 0,
     end: 6,

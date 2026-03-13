@@ -6,7 +6,7 @@
  * 核心优化：用一次 TreeWalker + Map 索引替代循环中反复创建 DOM Range
  */
 import { JSDOM } from 'jsdom';
-import { DOMRangeAdapter } from '../core/adapters/DOMRangeAdapter.js';
+import { DOMRangeAdapter, registerContainerConfig } from '../core/adapters/DOMRangeAdapter.js';
 import { getUnicodeStringLength } from '../core/utils.js';
 
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
@@ -21,6 +21,13 @@ global.Node = dom.window.Node;
 global.Text = dom.window.Text;
 global.Range = dom.window.Range;
 global.NodeFilter = dom.window.NodeFilter;
+
+/* 注册标准样式配置 */
+registerContainerConfig('bold', { tagName: 'strong', display: 'inline' });
+registerContainerConfig('italic', { tagName: 'em', display: 'inline' });
+registerContainerConfig('underline', { tagName: 'u', display: 'inline' });
+registerContainerConfig('strikethrough', { tagName: 's', display: 'inline' });
+registerContainerConfig('highlight', { tagName: 'mark', display: 'inline' });
 
 interface BenchResult {
   name: string;
@@ -133,7 +140,7 @@ function benchGetStylesInRange(): void {
   const html = Array.from({ length: 50 }, (_, i) => `<strong>${i}</strong><em>${i}</em>`).join('');
   const container = createContainer(html);
   const adapter = new DOMRangeAdapter({ container });
-  adapter.getStylesInRange(0, 50);
+  adapter.queryConfigs(0, 50);
 }
 
 /* ==================== 场景 5: setStyle 组合操作 ==================== */
@@ -141,13 +148,13 @@ function benchSetStyleNormal(): void {
   const html = '这是一段测试文本用于性能基准测试';
   const container = createContainer(html);
   const adapter = new DOMRangeAdapter({ container });
-  adapter.setStyle(2, 8, 'bold');
+  adapter.applyConfig(2, 8, 'bold');
 }
 
 function benchSetStyleCrossBlock(): void {
   const container = createContainer(createMultiParagraphHTML(20));
   const adapter = new DOMRangeAdapter({ container });
-  adapter.setStyle(5, 100, 'italic');
+  adapter.applyConfig(5, 100, 'italic');
 }
 
 /* ==================== 运行 ==================== */
@@ -172,15 +179,15 @@ const r3 = bench('adapter.getBlockElementsInRange()', benchGetBlockElements);
 printRow(r3);
 
 console.log('\n📊 场景 4: getStylesInRange - 100个样式元素');
-const r4 = bench('adapter.getStylesInRange()', benchGetStylesInRange);
+const r4 = bench('adapter.queryConfigs()', benchGetStylesInRange);
 printRow(r4);
 
 console.log('\n📊 场景 5: setStyle - 常规');
-const r5 = bench('adapter.setStyle(bold)', benchSetStyleNormal);
+const r5 = bench('adapter.applyConfig(bold)', benchSetStyleNormal);
 printRow(r5);
 
 console.log('\n📊 场景 6: setStyle - 跨段落');
-const r6 = bench('adapter.setStyle(crossBlock)', benchSetStyleCrossBlock);
+const r6 = bench('adapter.applyConfig(crossBlock)', benchSetStyleCrossBlock);
 printRow(r6);
 
 console.log('\n' + '='.repeat(70));

@@ -81,22 +81,6 @@ export class Range {
   }
 
   /**
-   * 对选区应用样式
-   * @param style 样式类型（如 'bold', 'italic'）
-   */
-  setStyle(style: string): void {
-    this._adapter.setStyle(this.start, this.end, style);
-  }
-
-  /**
-   * 移除选区的样式
-   * @param style 样式类型
-   */
-  removeStyle(style: string): void {
-    this._adapter.removeStyle(this.start, this.end, style);
-  }
-
-  /**
    * 用 DOM 元素包裹选区
    * @param elementCreator 元素创建函数
    * @param options 包裹选项

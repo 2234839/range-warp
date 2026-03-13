@@ -13,14 +13,8 @@
 import type { IRangeAdapter, WrapOptions, ContainerTagConfig } from './IRangeAdapter';
 import { getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils';
 
-/** 容器到标签的映射配置（支持动态注册） */
-const CONTAINER_CONFIGS: Record<string, ContainerTagConfig> = {
-  bold: { tagName: 'strong', display: 'inline' },
-  italic: { tagName: 'em', display: 'inline' },
-  underline: { tagName: 'u', display: 'inline' },
-  strikethrough: { tagName: 's', display: 'inline' },
-  highlight: { tagName: 'mark', display: 'inline' },
-};
+/** 容器到标签的映射配置（由上层服务通过 registerContainerConfig 动态注册） */
+const CONTAINER_CONFIGS: Record<string, ContainerTagConfig> = {};
 
 /** 缓存的选择器字符串 */
 let _cachedStyleSelector = '';
@@ -493,8 +487,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
     return start <= end ? [start, end] : [end, start];
   }
 
-  setStyle(start: number, end: number, style: string): void {
-    const config = getTagConfig(style);
+  applyConfig(start: number, end: number, configName: string): void {
+    const config = getTagConfig(configName);
     if (!config) return;
 
     // 标准化选区
@@ -615,8 +609,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
     return this._collectBlocksInRange(start, end, index, brIndex);
   }
 
-  removeStyle(start: number, end: number, style: string): void {
-    const config = getTagConfig(style);
+  removeConfig(start: number, end: number, configName: string): void {
+    const config = getTagConfig(configName);
     if (!config) return;
 
     // 标准化选区
@@ -625,7 +619,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     // 构建选择器
     const selector = configToSelector(config);
 
-    this.unwrapElement(start, end, selector, style);
+    this.unwrapElement(start, end, selector, configName);
     this.normalize(start, end);
   }
 
@@ -1330,7 +1324,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
     return matches;
   }
 
-  getStylesInRange(start: number, end: number): Set<string> {
+  queryConfigs(start: number, end: number): Set<string> {
     const result = new Set<string>();
     const selector = buildStyleSelector();
     const tagToConfig = buildTagToConfigName();

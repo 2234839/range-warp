@@ -63,6 +63,13 @@ function createAdapter() {
 
 /* ==================== 注册测试容器配置 ==================== */
 
+/* 注册标准样式配置 */
+registerContainerConfig('bold', { tagName: 'strong', display: 'inline' });
+registerContainerConfig('italic', { tagName: 'em', display: 'inline' });
+registerContainerConfig('underline', { tagName: 'u', display: 'inline' });
+registerContainerConfig('strikethrough', { tagName: 's', display: 'inline' });
+registerContainerConfig('highlight', { tagName: 'mark', display: 'inline' });
+
 /* 注册书签：不可复制 */
 registerContainerConfig('test-sanitize-bookmark', {
   tagName: 'span',

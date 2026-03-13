@@ -111,20 +111,25 @@ export interface IRangeAdapter {
   replaceText(start: number, end: number, text: string): void;
 
   /**
-   * 对指定范围内的文本应用样式
+   * 使用已注册的容器配置包裹指定范围
+   *
+   * 根据配置名查找对应的 tagName 和跨块策略，执行包裹操作。
+   * 适配器不关心配置的业务含义，只执行 DOM 包裹。
+   *
    * @param start 起始字符下标
    * @param end 结束字符下标
-   * @param style 样式类型（如 'bold', 'italic'）
+   * @param configName 已注册的容器配置名（如 'bold', 'bookmark'）
    */
-  setStyle(start: number, end: number, style: string): void;
+  applyConfig(start: number, end: number, configName: string): void;
 
   /**
-   * 移除指定范围内的样式
+   * 移除指定范围内匹配配置名的元素包裹，并规范化结构
+   *
    * @param start 起始字符下标
    * @param end 结束字符下标
-   * @param style 样式类型
+   * @param configName 已注册的容器配置名
    */
-  removeStyle(start: number, end: number, style: string): void;
+  removeConfig(start: number, end: number, configName: string): void;
 
   /**
    * 用 DOM 元素包裹指定范围的文本
@@ -234,15 +239,13 @@ export interface IRangeAdapter {
   sanitizeHTML(html: string): string;
 
   /**
-   * 查询范围内存在的样式集合
-   *
-   * 单次 DOM 查询获取所有样式元素，避免多次 querySelectorAll
+   * 查询范围内已配置元素的配置名集合
    *
    * @param start 范围起始（Unicode 字符位置）
    * @param end 范围结束（Unicode 字符位置）
-   * @returns 样式配置名集合（如 'bold', 'italic'）
+   * @returns 配置名集合（如 'bold', 'bookmark'）
    */
-  getStylesInRange(start: number, end: number): Set<string>;
+  queryConfigs(start: number, end: number): Set<string>;
 
   /**
    * 在编辑器容器内查询匹配选择器的元素

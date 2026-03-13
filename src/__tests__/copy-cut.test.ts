@@ -135,6 +135,13 @@ function assertNotContains(html: string, ...substrings: string[]): boolean {
 
 /* ==================== 注册容器配置 ==================== */
 
+/* 注册标准样式配置 */
+registerContainerConfig('bold', { tagName: 'strong', display: 'inline' });
+registerContainerConfig('italic', { tagName: 'em', display: 'inline' });
+registerContainerConfig('underline', { tagName: 'u', display: 'inline' });
+registerContainerConfig('strikethrough', { tagName: 's', display: 'inline' });
+registerContainerConfig('highlight', { tagName: 'mark', display: 'inline' });
+
 registerContainerConfig('test-rev-insert', {
   tagName: 'span',
   attributeSelector: '.revision-insert',
