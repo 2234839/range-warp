@@ -217,8 +217,14 @@
       html = wrapWithMissingFormatting(html, ancestors);
     }
 
+    /**
+     * 纯文本使用 adapter 的 getText 而非 selection.toString()
+     * selection.toString() 不包含块边界的虚拟 \n，与我们的位置系统不一致
+     */
+    const rangeObj = activeEditor.value!.createRangeFromDOM(range);
+    const plainText = rangeObj ? rangeObj.getText() : selection.toString();
     event.clipboardData?.setData('text/html', html);
-    event.clipboardData?.setData('text/plain', selection.toString());
+    event.clipboardData?.setData('text/plain', plainText);
 
     /** 剪切时删除选区内容 */
     if (event.type === 'cut') {

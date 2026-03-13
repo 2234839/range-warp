@@ -11,7 +11,7 @@
  */
 
 import type { IRangeAdapter, WrapOptions, ContainerTagConfig } from './IRangeAdapter';
-import { getElementPosition, getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils';
+import { getUnicodeStringLength, getUtf16Offset, getUtf16Slice } from '../utils';
 
 /** 容器到标签的映射配置（支持动态注册） */
 const CONTAINER_CONFIGS: Record<string, ContainerTagConfig> = {
@@ -201,8 +201,8 @@ export function getNonCopyableSelector(): string {
     .join(',');
 }
 
-/** 块级元素选择器（从 BLOCK_TAG_NAMES 派生，另加 br 换行边界） */
-const BLOCK_SELECTOR = [...BLOCK_TAG_NAMES, 'br'].join(', ');
+/** 块级元素选择器（不含 br，用于收集块级元素和段落合并） */
+const BLOCK_ELEMENT_SELECTOR = [...BLOCK_TAG_NAMES].join(', ');
 
 
 /** 类型守卫：判断节点是否为元素节点（兼容跨 iframe 场景） */
@@ -500,12 +500,14 @@ export class DOMRangeAdapter implements IRangeAdapter {
     // 标准化选区
     [start, end] = this.normalizeRange(start, end);
 
-    // 对于 inline 样式，检查是否跨段落
+    // 对于 inline 样式，检查是否跨段落或跨换行
     if (config.display === 'inline' || !config.display) {
-      const { snapshot, index } = this._buildTextNodeData();
+      const { snapshot, index, brIndex } = this._buildTextNodeData();
 
-      /* 检测是否有块级元素 */
-      if (this._collectBlocksInRange(start, end, index).length > 0) {
+      /** 检测是否有块级元素或范围内的 <br> 换行 */
+      const hasBlocks = this._collectBlocksInRange(start, end, index, brIndex).length > 0;
+      const hasBR = [...brIndex.values()].some(pos => pos > start && pos < end);
+      if (hasBlocks || hasBR) {
         this._applyStyleAcrossBlocksWithData(start, end, config, snapshot, index);
         return;
       }
@@ -520,19 +522,15 @@ export class DOMRangeAdapter implements IRangeAdapter {
   private _collectBlocksInRange(
     start: number, end: number,
     index: Map<Text, { start: number; end: number }>,
+    brIndex: Map<Element, number>,
   ): Element[] {
     const result: Element[] = [];
-    const allElements = this._container.querySelectorAll(BLOCK_SELECTOR);
+    const allElements = this._container.querySelectorAll(BLOCK_ELEMENT_SELECTOR);
     for (const elem of allElements) {
-      const isBR = elem.tagName.toLowerCase() === 'br';
-      const pos = isBR
-        ? getElementPosition(elem, this._container)
-        : this._getPositionFromIndex(elem, index);
+      const pos = this._getPositionFromIndex(elem, index, brIndex);
       if (!pos) continue;
 
-      if (isBR
-        ? (pos.start >= start && pos.start < end)
-        : (pos.start < end && pos.end > start)) {
+      if (pos.start < end && pos.end > start) {
         result.push(elem);
       }
     }
@@ -613,8 +611,8 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * @returns 块级元素数组
    */
   getBlockElementsInRange(start: number, end: number): Element[] {
-    const index = this._buildIndex();
-    return this._collectBlocksInRange(start, end, index);
+    const { index, brIndex } = this._buildTextNodeData();
+    return this._collectBlocksInRange(start, end, index, brIndex);
   }
 
   removeStyle(start: number, end: number, style: string): void {

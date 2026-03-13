@@ -49,34 +49,6 @@ export function getUtf16Slice(str: string, start: number, end: number): string {
 }
 
 /**
- * 计算元素在容器内的文本位置范围（基于 Unicode 字符下标）
- *
- * 同时被 Bookmark、Revision、DOMRangeAdapter 三处复用，
- * 避免 calculateElementOffset 的重复实现
- *
- * @param element 目标元素
- * @param container 容器元素
- * @returns { start, end } 或 null（element 不在 container 内时）
- */
-export function getElementPosition(element: Element, container: Element): { start: number; end: number } | null {
-  try {
-    const doc = element.ownerDocument;
-    const elemRange = doc.createRange();
-    elemRange.selectNodeContents(element);
-    const preRange = doc.createRange();
-    preRange.selectNodeContents(container);
-    preRange.setEnd(elemRange.startContainer, elemRange.startOffset);
-
-    const start = getUnicodeStringLength(preRange.toString());
-    const end = start + getUnicodeStringLength(elemRange.toString());
-
-    return { start, end };
-  } catch {
-    return null;
-  }
-}
-
-/**
  * 根据 depth-first 遍历索引在容器中查找元素
  * 兼容主文档和 iframe 文档场景
  */

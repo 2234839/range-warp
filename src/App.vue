@@ -4,7 +4,7 @@
   import EditorCore from './components/EditorCore.vue';
   import DomTreePanel from './components/DomTreePanel.vue';
   import diff from 'fast-diff';
-  import { getUnicodeStringLength, findElementByPath, getElementPosition } from './core/utils';
+  import { getUnicodeStringLength, findElementByPath } from './core/utils';
 
   /** 编辑器模式 */
   type EditorMode = 'native' | 'ueditor-plus';
@@ -32,7 +32,7 @@
     const element = findElementByPath(container, elementIndex);
     if (!element) return;
 
-    const pos = getElementPosition(element, container);
+    const pos = editor.value.getElementPosition(element);
     if (!pos) return;
 
     editor.value.createRange(pos.start, pos.end).select();

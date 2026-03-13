@@ -309,4 +309,11 @@ export class Editor {
     if (!pos) return null;
     return this.createRange(pos.start, pos.end);
   }
+
+  /**
+   * 获取元素在文档中的虚拟位置范围（包含块边界 \n）
+   */
+  getElementPosition(element: Element): { start: number; end: number } | null {
+    return this._adapter.getElementPosition(element);
+  }
 }
