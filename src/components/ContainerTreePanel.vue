@@ -71,6 +71,9 @@
     const defs = configDefs.value;
     if (defs.length === 0) return [];
 
+    /** 一次性构建索引，避免循环内重复遍历 */
+    const prebuiltIndex = ed.buildIndex();
+
     /** Phase 1: 收集原始容器数据，按 (configName:id) 分组 */
     const rawMap = new Map<string, {
       configName: string;
@@ -81,7 +84,7 @@
     for (const def of defs) {
       const elements = ed.querySelectorAll(def.selector);
       for (const el of elements) {
-        const pos = ed.getElementPosition(el);
+        const pos = ed.getElementPosition(el, prebuiltIndex);
         if (!pos) continue;
 
         const id = def.idAttribute ? el.getAttribute(def.idAttribute) || undefined : undefined;
