@@ -341,7 +341,7 @@
 
                   <div class="text-sm">
                     <span class="text-gray-600">选中内容:</span>
-                    <div class="mt-1 p-2 bg-gray-50 rounded border border-gray-200 font-mono text-xs break-all">
+                    <div class="mt-1 p-2 bg-gray-50 rounded border border-gray-200 font-mono text-xs break-all whitespace-pre-wrap">
                       "{{ selectedRange.text }}"
                     </div>
                   </div>
