@@ -6,7 +6,7 @@ import { autoSaveLogsPlugin } from './vite-plugin-auto-save-logs'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/range-warp/',
+  base: './',
   plugins: [
     vue(),
     tailwindcss(),
