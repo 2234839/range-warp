@@ -10,7 +10,7 @@
  * - RevisionService 的 accept/reject + 样式移除
  */
 import { JSDOM } from 'jsdom';
-import { DOMRangeAdapter, registerContainerConfig } from '../core/adapters/DOMRangeAdapter.js';
+import { DOMRangeAdapter } from '../core/adapters/DOMRangeAdapter.js';
 import { StyleService } from '../core/services/StyleService.js';
 import { BookmarkService } from '../core/services/BookmarkService.js';
 import { RevisionService } from '../core/services/RevisionService.js';
@@ -291,7 +291,7 @@ function createEnv(html: string) {
 /* ==================== 14. queryConfigs 验证移除结果 ==================== */
 
 {
-  const { container, adapter, styleService, bookmarkService } = createEnv('Hello World');
+  const { container: _container, adapter, styleService, bookmarkService } = createEnv('Hello World');
   styleService.setStyle(0, 5, 'bold');
   styleService.setStyle(0, 5, 'italic');
   styleService.setStyle(0, 5, 'underline');

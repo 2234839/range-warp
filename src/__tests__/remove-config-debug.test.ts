@@ -69,7 +69,7 @@ function createEnv(html: string) {
 }
 
 {
-  const { container, adapter } = createEnv('<p><strong><span class="bookmark" data-bookmark-id="bm-1" data-bookmark-name="test" data-bookmark-create-time="1234">Hello</span></strong></p>');
+  const { container: _container, adapter } = createEnv('<p><strong><span class="bookmark" data-bookmark-id="bm-1" data-bookmark-name="test" data-bookmark-create-time="1234">Hello</span></strong></p>');
   const strongPos = adapter.getElementPosition(adapter.querySelectorAll('strong')[0]);
   const bmPos = adapter.getElementPosition(adapter.querySelectorAll('.bookmark')[0]);
   console.log(`  [0.4] strong pos=${JSON.stringify(strongPos)}, bm pos=${JSON.stringify(bmPos)}, text="${adapter.getText(0, adapter.getDocumentLength())}"`);

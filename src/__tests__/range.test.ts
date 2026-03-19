@@ -109,7 +109,7 @@ function createEnv(html: string) {
 }
 
 {
-  const { container, adapter } = createEnv('Hello World');
+  const { container: _container, adapter } = createEnv('Hello World');
 
   /* 3.2 在中间位置插入 */
   const range = new Range({ start: 5, end: 5, adapter });

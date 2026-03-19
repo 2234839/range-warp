@@ -15,7 +15,7 @@
  */
 
 import { JSDOM } from 'jsdom';
-import { DOMRangeAdapter, registerContainerConfig } from '../core/adapters/DOMRangeAdapter.js';
+import { DOMRangeAdapter } from '../core/adapters/DOMRangeAdapter.js';
 import { RevisionService } from '../core/services/RevisionService.js';
 import { Range } from '../core/models/Range.js';
 

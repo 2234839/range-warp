@@ -23,7 +23,7 @@ interface UseNativeEditorOptions extends BaseEditorOptions {
  * 调用方在 onMounted 中调用 `init()` 初始化
  */
 export function useNativeEditor(options: UseNativeEditorOptions): EditorComposable {
-  const { containerRef, currentUser, onContentChange, onFocus, onBlur, onSelectionChange, onCopyCut, onInput } = options;
+  const { containerRef, currentUser, onContentChange: _onContentChange, onFocus, onBlur, onSelectionChange, onCopyCut, onInput } = options;
 
   const editor = shallowRef<EditorType | null>(null);
   const selectionContext = ref<SelectionContext>({ ownerWindow: window, container: null });

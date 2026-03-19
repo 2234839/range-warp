@@ -7,7 +7,7 @@
  * 内部其他层也被错误解包或拆分
  */
 import { JSDOM } from 'jsdom';
-import { DOMRangeAdapter, registerContainerConfig } from '../core/adapters/DOMRangeAdapter.js';
+import { DOMRangeAdapter } from '../core/adapters/DOMRangeAdapter.js';
 import { StyleService } from '../core/services/StyleService.js';
 
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost' });

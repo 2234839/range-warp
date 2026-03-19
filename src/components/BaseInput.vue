@@ -114,7 +114,7 @@
   };
 
   /** 根据尺寸获取内边距 */
-  const getPaddingBySize = (size: string) => {
+  const _getPaddingBySize = (size: string) => {
     switch (size) {
       case 'small':
         return '4px 8px';

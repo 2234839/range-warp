@@ -158,7 +158,7 @@ console.log('原则: 按位置精确切片，换行符占一个位置');
 
 const cases8 = dom.window.document.createElement('div');
 cases8.innerHTML = '<p>Hello<br>World</p>';
-const adapter8 = new DOMRangeAdapter({ container: cases8 });
+const _adapter8 = new DOMRangeAdapter({ container: cases8 });
 
 assertGetText('8.1 取 "Hello"', '<p>Hello<br>World</p>', 0, 5, 'Hello');
 assertGetText('8.2 取换行', '<p>Hello<br>World</p>', 5, 6, '\n');
@@ -167,7 +167,7 @@ assertGetText('8.4 取 "ell"', '<p>Hello<br>World</p>', 1, 4, 'ell');
 
 const cases8b = dom.window.document.createElement('div');
 cases8b.innerHTML = '<p>First</p><p>Second</p>';
-const adapter8b = new DOMRangeAdapter({ container: cases8b });
+const _adapter8b = new DOMRangeAdapter({ container: cases8b });
 
 assertGetText('8.5 两段取第一段', '<p>First</p><p>Second</p>', 0, 6, 'First\n');
 assertGetText('8.6 两段取换行', '<p>First</p><p>Second</p>', 5, 6, '\n');
