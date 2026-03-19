@@ -149,7 +149,7 @@ const testCases: TestCase[] = [
   {
     name: '3.1 加粗文本上再加斜体',
     initialHTML: '<strong>hello</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 5, 'italic');
     },
     start: 0,
@@ -160,7 +160,7 @@ const testCases: TestCase[] = [
   {
     name: '3.2 部分覆盖加粗',
     initialHTML: '<strong>hello world</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 5, 'italic');
     },
     start: 0,
@@ -173,7 +173,7 @@ const testCases: TestCase[] = [
   {
     name: '4.1 完全移除样式',
     initialHTML: '<strong>hello</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 5, 'bold');
     },
     start: 0,
@@ -184,7 +184,7 @@ const testCases: TestCase[] = [
   {
     name: '4.2 部分移除样式',
     initialHTML: '<strong>hello</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 3, 'bold');
     },
     start: 0,
@@ -195,7 +195,7 @@ const testCases: TestCase[] = [
   {
     name: '4.3 移除不存在的样式不应改变 DOM',
     initialHTML: '<strong>hello</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 5, 'italic');
     },
     start: 0,
@@ -208,7 +208,7 @@ const testCases: TestCase[] = [
   {
     name: '5.1 加粗+斜体交叉区域',
     initialHTML: '<strong><em>bold-italic</em></strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 11, 'bold');
     },
     start: 0,
@@ -219,7 +219,7 @@ const testCases: TestCase[] = [
   {
     name: '5.2 加粗+斜体部分区域移除',
     initialHTML: '<strong><em>abc</em><em>def</em></strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 3, 'bold');
     },
     start: 0,
@@ -232,7 +232,7 @@ const testCases: TestCase[] = [
   {
     name: '6.1 空范围应用样式不应改变 DOM',
     initialHTML: 'hello',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 0, 'bold');
     },
     start: 0,
@@ -243,7 +243,7 @@ const testCases: TestCase[] = [
   {
     name: '6.2 起始位置应用样式',
     initialHTML: 'hello world',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 1, 'bold');
     },
     start: 0,
@@ -254,7 +254,7 @@ const testCases: TestCase[] = [
   {
     name: '6.3 末尾位置应用样式',
     initialHTML: 'hello world',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(10, 11, 'bold');
     },
     start: 10,
@@ -265,7 +265,7 @@ const testCases: TestCase[] = [
   {
     name: '6.4 全选后应用样式',
     initialHTML: 'hello world',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 11, 'bold');
     },
     start: 0,
@@ -278,7 +278,7 @@ const testCases: TestCase[] = [
   {
     name: '7.1 跨段落应用样式',
     initialHTML: 'line1<div>line2</div>line3',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 18, 'bold');
     },
     start: 0,
@@ -291,7 +291,7 @@ const testCases: TestCase[] = [
   {
     name: '8.1 插入文本后位置不变',
     initialHTML: 'ab',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.insertText(1, 'x');
       const text = adapter.getText(0, adapter.getDocumentLength());
       if (text !== 'axb') throw new Error(`Expected "axb", got "${text}"`);
@@ -304,7 +304,7 @@ const testCases: TestCase[] = [
   {
     name: '8.2 删除文本',
     initialHTML: 'abc',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.delete(1, 2);
     },
     start: 1,
@@ -315,7 +315,7 @@ const testCases: TestCase[] = [
   {
     name: '8.3 替换文本',
     initialHTML: 'abc',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.replaceText(0, 3, 'xyz');
     },
     start: 0,
@@ -328,7 +328,7 @@ const testCases: TestCase[] = [
   {
     name: '9.1 删除带样式的文本',
     initialHTML: '<strong>a</strong>b<strong>c</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.delete(1, 2);
     },
     start: 1,
@@ -339,7 +339,7 @@ const testCases: TestCase[] = [
   {
     name: '9.2 删除样式文本（跨样式边界）',
     initialHTML: '<strong>a</strong><em>b</em>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.delete(0, 2);
     },
     start: 0,
@@ -350,7 +350,7 @@ const testCases: TestCase[] = [
   {
     name: '9.3 替换带样式的文本',
     initialHTML: '<strong>hello</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.replaceText(0, 3, 'hi');
     },
     start: 0,
@@ -363,7 +363,7 @@ const testCases: TestCase[] = [
   {
     name: '10.1 无样式范围返回空集合',
     initialHTML: 'hello',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const styles = adapter.queryConfigs(0, 5);
       if (styles.size !== 0) throw new Error(`Expected empty set, got ${[...styles]}`);
     },
@@ -375,7 +375,7 @@ const testCases: TestCase[] = [
   {
     name: '10.2 加粗范围返回 bold',
     initialHTML: '<strong>hello</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const styles = adapter.queryConfigs(0, 5);
       if (!styles.has('bold')) throw new Error(`Expected bold in set, got ${[...styles]}`);
     },
@@ -387,7 +387,7 @@ const testCases: TestCase[] = [
   {
     name: '10.3 多种样式范围返回多个',
     initialHTML: '<strong><em>hi</em></strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const styles = adapter.queryConfigs(0, 2);
       if (!styles.has('bold') || !styles.has('italic')) throw new Error(`Expected bold+italic, got ${[...styles]}`);
     },
@@ -399,7 +399,7 @@ const testCases: TestCase[] = [
   {
     name: '10.4 部分样式范围只返回匹配的样式',
     initialHTML: '<strong>a</strong><em>b</em>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const styles = adapter.queryConfigs(0, 1);
       if (!styles.has('bold')) throw new Error(`Expected bold, got ${[...styles]}`);
       if (styles.has('italic')) throw new Error(`Should not have italic, got ${[...styles]}`);
@@ -414,7 +414,7 @@ const testCases: TestCase[] = [
   {
     name: '11.1 查找简单文本',
     initialHTML: 'hello world hello',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const results = adapter.findText('hello');
       if (results.length !== 2) throw new Error(`Expected 2 matches, got ${results.length}`);
       if (results[0].start !== 0 || results[0].end !== 5) throw new Error(`First match wrong: ${JSON.stringify(results[0])}`);
@@ -428,7 +428,7 @@ const testCases: TestCase[] = [
   {
     name: '11.2 查找不存在的文本',
     initialHTML: 'hello',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const results = adapter.findText('xyz');
       if (results.length !== 0) throw new Error(`Expected 0 matches, got ${results.length}`);
     },
@@ -440,7 +440,7 @@ const testCases: TestCase[] = [
   {
     name: '11.3 空搜索文本',
     initialHTML: 'hello',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const results = adapter.findText('');
       if (results.length !== 0) throw new Error(`Expected 0 matches for empty string`);
     },
@@ -454,7 +454,7 @@ const testCases: TestCase[] = [
   {
     name: '12.1 nest 模式嵌套',
     initialHTML: '<em>text</em>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.wrapElement(0, 4, () => {
         const el = document.createElement('strong');
         el.className = 'wrap-test';
@@ -471,7 +471,7 @@ const testCases: TestCase[] = [
   {
     name: '13.1 fill-gaps 修复分片容器',
     initialHTML: '<div><span class="frag" data-frag-id="1">a</span><span class="frag" data-frag-id="1">c</span></div>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.repairSplitContainers();
     },
     start: 0,
@@ -484,7 +484,7 @@ const testCases: TestCase[] = [
   {
     name: '14.1 反复应用和移除样式',
     initialHTML: 'hello',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 5, 'bold');
       adapter.normalize(0, 5);
       adapter.removeConfig(0, 5, 'bold');
@@ -497,7 +497,7 @@ const testCases: TestCase[] = [
   {
     name: '14.2 切换不同样式',
     initialHTML: 'hello',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 5, 'bold');
       adapter.removeConfig(0, 5, 'bold');
       adapter.applyConfig(0, 5, 'italic');
@@ -512,7 +512,7 @@ const testCases: TestCase[] = [
   {
     name: '15.1 getBlockElementsInRange 识别 div',
     initialHTML: 'a<div>bc</div>d',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const blocks = adapter.getBlockElementsInRange(0, 4);
       if (blocks.length !== 1) throw new Error(`Expected 1 block, got ${blocks.length}`);
       if (blocks[0].tagName.toLowerCase() !== 'div') throw new Error(`Expected div, got ${blocks[0].tagName}`);
@@ -525,7 +525,7 @@ const testCases: TestCase[] = [
   {
     name: '15.2 跨块应用样式保留块结构',
     initialHTML: 'a<div>b</div>c',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 5, 'bold');
     },
     start: 0,
@@ -538,7 +538,7 @@ const testCases: TestCase[] = [
   {
     name: '16.1 嵌套 em+strong 全量移除外层',
     initialHTML: '<strong><em>abcd</em></strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 4, 'bold');
     },
     start: 0,
@@ -549,7 +549,7 @@ const testCases: TestCase[] = [
   {
     name: '16.2 嵌套 em+strong 移除中间部分',
     initialHTML: '<strong><em>abcd</em></strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(1, 3, 'bold');
     },
     start: 0,
@@ -560,7 +560,7 @@ const testCases: TestCase[] = [
   {
     name: '16.3 三层嵌套移除最外层',
     initialHTML: '<strong><em><u>text</u></em></strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 4, 'bold');
     },
     start: 0,
@@ -571,7 +571,7 @@ const testCases: TestCase[] = [
   {
     name: '16.4 三层嵌套移除中间层',
     initialHTML: '<strong><em><u>text</u></em></strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 4, 'italic');
     },
     start: 0,
@@ -584,7 +584,7 @@ const testCases: TestCase[] = [
   {
     name: '17.1 部分移除后相邻相同标签',
     initialHTML: '<em>a</em><em>b</em>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 1, 'bold');
       adapter.normalize(0, 4);
     },
@@ -598,7 +598,7 @@ const testCases: TestCase[] = [
   {
     name: '18.1 三种样式叠加',
     initialHTML: 'hello',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 5, 'bold');
       adapter.applyConfig(0, 5, 'italic');
       adapter.applyConfig(0, 5, 'underline');
@@ -611,7 +611,7 @@ const testCases: TestCase[] = [
   {
     name: '18.2 部分区域叠加样式',
     initialHTML: 'abcde',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 5, 'bold');
       adapter.applyConfig(0, 3, 'italic');
     },
@@ -625,7 +625,7 @@ const testCases: TestCase[] = [
   {
     name: '19.1 中文文本样式',
     initialHTML: '你好世界',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 2, 'bold');
     },
     start: 0,
@@ -636,7 +636,7 @@ const testCases: TestCase[] = [
   {
     name: '19.2 中文部分移除样式',
     initialHTML: '<strong>你好世界</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(2, 4, 'bold');
     },
     start: 0,
@@ -647,7 +647,7 @@ const testCases: TestCase[] = [
   {
     name: '19.3 混合中英文查找',
     initialHTML: 'hello你好world',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const results = adapter.findText('你好');
       if (results.length !== 1) throw new Error(`Expected 1 match, got ${results.length}`);
       if (results[0].start !== 5 || results[0].end !== 7) throw new Error(`Wrong position: ${JSON.stringify(results[0])}`);
@@ -662,7 +662,7 @@ const testCases: TestCase[] = [
   {
     name: '20.1 空容器设置样式',
     initialHTML: '<div></div>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 0, 'bold');
     },
     start: 0,
@@ -673,7 +673,7 @@ const testCases: TestCase[] = [
   {
     name: '20.2 只有空标签的容器',
     initialHTML: '<strong></strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 0, 'bold');
     },
     start: 0,
@@ -686,7 +686,7 @@ const testCases: TestCase[] = [
   {
     name: '21.1 连续设置不同样式然后全部移除',
     initialHTML: 'test',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 4, 'bold');
       adapter.applyConfig(0, 4, 'italic');
       adapter.applyConfig(0, 4, 'underline');
@@ -702,7 +702,7 @@ const testCases: TestCase[] = [
   {
     name: '21.2 交叉设置和移除',
     initialHTML: 'abcdef',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 6, 'bold');
       adapter.removeConfig(2, 4, 'bold');
       adapter.applyConfig(2, 4, 'italic');

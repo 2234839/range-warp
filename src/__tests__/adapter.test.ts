@@ -195,7 +195,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 5.1',
     initialHTML: '1234',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 4, 'bold');
       adapter.applyConfig(1, 3, 'italic');
     },
@@ -209,7 +209,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 6.1',
     initialHTML: '12345',
-    operation: (adapter, start, end) => adapter.insertText(2, 'abc'),
+    operation: (adapter, _start, _end) => adapter.insertText(2, 'abc'),
     start: 0,
     end: 0,
     expectedHTML: '12abc345',
@@ -219,7 +219,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 6.2',
     initialHTML: '12345',
-    operation: (adapter, start, end) => adapter.delete(1, 4),
+    operation: (adapter, _start, _end) => adapter.delete(1, 4),
     start: 0,
     end: 0,
     expectedHTML: '15',
@@ -229,7 +229,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 6.3',
     initialHTML: '12345',
-    operation: (adapter, start, end) => adapter.replaceText(1, 4, 'abc'),
+    operation: (adapter, _start, _end) => adapter.replaceText(1, 4, 'abc'),
     start: 0,
     end: 0,
     expectedHTML: '1abc5',
@@ -240,7 +240,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 7.1',
     initialHTML: '1234',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 3, 'bold');
       adapter.applyConfig(1, 4, 'italic');
     },
@@ -253,7 +253,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 7.2',
     initialHTML: '1234',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 4, 'bold');
       adapter.applyConfig(0, 4, 'italic');
     },
@@ -266,7 +266,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 7.3',
     initialHTML: '<strong><em>1234</em></strong>',
-    operation: (adapter, start, end) => adapter.removeConfig(0, 4, 'bold'),
+    operation: (adapter, _start, _end) => adapter.removeConfig(0, 4, 'bold'),
     start: 0,
     end: 4,
     expectedHTML: '<em>1234</em>',
@@ -277,7 +277,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 8.1',
     initialHTML: '',
-    operation: (adapter, start, end) => adapter.insertText(0, 'text'),
+    operation: (adapter, _start, _end) => adapter.insertText(0, 'text'),
     start: 0,
     end: 0,
     expectedHTML: 'text',
@@ -287,7 +287,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 8.2',
     initialHTML: 'text',
-    operation: (adapter, start, end) => adapter.applyConfig(0, 4, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(0, 4, 'bold'),
     start: 0,
     end: 4,
     expectedHTML: '<strong>text</strong>',
@@ -297,7 +297,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 8.3',
     initialHTML: '<strong>text</strong>',
-    operation: (adapter, start, end) => adapter.removeConfig(0, 4, 'bold'),
+    operation: (adapter, _start, _end) => adapter.removeConfig(0, 4, 'bold'),
     start: 0,
     end: 4,
     expectedHTML: 'text',
@@ -307,7 +307,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 8.4',
     initialHTML: 'ab',
-    operation: (adapter, start, end) => adapter.applyConfig(0, 1, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(0, 1, 'bold'),
     start: 0,
     end: 1,
     expectedHTML: '<strong>a</strong>b',
@@ -317,7 +317,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 8.5',
     initialHTML: '<strong>a</strong>',
-    operation: (adapter, start, end) => adapter.applyConfig(0, 1, 'italic'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(0, 1, 'italic'),
     start: 0,
     end: 1,
     expectedHTML: '<strong><em>a</em></strong>',
@@ -328,7 +328,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 9.1',
     initialHTML: '<strong><em><u>text</u></em></strong>',
-    operation: (adapter, start, end) => adapter.removeConfig(0, 4, 'italic'),
+    operation: (adapter, _start, _end) => adapter.removeConfig(0, 4, 'italic'),
     start: 0,
     end: 4,
     expectedHTML: '<strong><u>text</u></strong>',
@@ -338,7 +338,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 9.2',
     initialHTML: 'text',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 4, 'bold');
       adapter.applyConfig(0, 4, 'italic');
       adapter.applyConfig(0, 4, 'underline');
@@ -353,7 +353,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 10.1',
     initialHTML: '<strong>123</strong>',
-    operation: (adapter, start, end) => adapter.insertText(3, '4'),
+    operation: (adapter, _start, _end) => adapter.insertText(3, '4'),
     start: 0,
     end: 0,
     expectedHTML: '<strong>1234</strong>',
@@ -363,7 +363,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 10.2',
     initialHTML: '<strong>234</strong>',
-    operation: (adapter, start, end) => adapter.insertText(0, '1'),
+    operation: (adapter, _start, _end) => adapter.insertText(0, '1'),
     start: 0,
     end: 0,
     expectedHTML: '<strong>1234</strong>',
@@ -373,7 +373,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 10.3',
     initialHTML: '<strong>14</strong>',
-    operation: (adapter, start, end) => adapter.insertText(1, '23'),
+    operation: (adapter, _start, _end) => adapter.insertText(1, '23'),
     start: 0,
     end: 0,
     expectedHTML: '<strong>1234</strong>',
@@ -383,7 +383,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 10.4',
     initialHTML: '<strong>12345</strong>',
-    operation: (adapter, start, end) => adapter.delete(1, 4),
+    operation: (adapter, _start, _end) => adapter.delete(1, 4),
     start: 0,
     end: 0,
     expectedHTML: '<strong>15</strong>',
@@ -394,7 +394,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 11.1',
     initialHTML: 'line1<br>line2',
-    operation: (adapter, start, end) => adapter.applyConfig(0, 5, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(0, 5, 'bold'),
     start: 0,
     end: 5,
     expectedHTML: '<strong>line1</strong><br>line2',
@@ -404,7 +404,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 11.2',
     initialHTML: '<strong>line1</strong><br><strong>line2</strong>',
-    operation: (adapter, start, end) => adapter.applyConfig(0, 11, 'italic'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(0, 11, 'italic'),
     start: 0,
     end: 11,
     expectedHTML: '<em><strong>line1</strong></em><br><em><strong>line2</strong></em>',
@@ -415,7 +415,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 12.1',
     initialHTML: '1😀2',
-    operation: (adapter, start, end) => adapter.applyConfig(1, 2, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(1, 2, 'bold'),
     start: 0,
     end: 3,
     expectedHTML: '1<strong>😀</strong>2',
@@ -425,7 +425,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 12.2',
     initialHTML: '这是一段测试文本',
-    operation: (adapter, start, end) => adapter.applyConfig(2, 6, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(2, 6, 'bold'),
     start: 0,
     end: 8,
     expectedHTML: '这是<strong>一段测试</strong>文本',
@@ -463,7 +463,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 13.3',
     initialHTML: '1234',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.applyConfig(0, 3, 'bold');
       adapter.applyConfig(2, 4, 'italic');
     },
@@ -477,7 +477,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 14.1',
     initialHTML: '<strong>a</strong>b<strong>c</strong>',
-    operation: (adapter, start, end) => adapter.applyConfig(0, 3, 'italic'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(0, 3, 'italic'),
     start: 0,
     end: 3,
     expectedHTML: '<em><strong>a</strong>b<strong>c</strong></em>',
@@ -487,7 +487,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 14.2',
     initialHTML: '12<strong>34</strong>56',
-    operation: (adapter, start, end) => adapter.applyConfig(1, 5, 'italic'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(1, 5, 'italic'),
     start: 0,
     end: 0,
     expectedHTML: '1<em>2<strong>34</strong>5</em>6',
@@ -498,7 +498,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 15.1',
     initialHTML: '<p>123</p><p>456</p>',
-    operation: (adapter, start, end) => adapter.applyConfig(2, 5, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(2, 5, 'bold'),
     start: 0,
     end: 0,
     expectedHTML: '<p>12<strong>3</strong></p><p><strong>4</strong>56</p>',
@@ -508,7 +508,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 15.2',
     initialHTML: '<div>123</div><div>456</div>',
-    operation: (adapter, start, end) => adapter.applyConfig(2, 5, 'italic'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(2, 5, 'italic'),
     start: 0,
     end: 0,
     expectedHTML: '<div>12<em>3</em></div><div><em>4</em>56</div>',
@@ -519,7 +519,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 16.1',
     initialHTML: '<strong>1234</strong>',
-    operation: (adapter, start, end) => adapter.removeConfig(0, 4, 'bold'),
+    operation: (adapter, _start, _end) => adapter.removeConfig(0, 4, 'bold'),
     start: 0,
     end: 4,
     expectedHTML: '1234',
@@ -529,7 +529,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 16.2',
     initialHTML: '<strong><em>1234</em></strong>',
-    operation: (adapter, start, end) => adapter.removeConfig(1, 3, 'bold'),
+    operation: (adapter, _start, _end) => adapter.removeConfig(1, 3, 'bold'),
     start: 0,
     end: 4,
     expectedHTML: '<strong><em>1</em></strong><em>23</em><strong><em>4</em></strong>',
@@ -540,7 +540,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 17.1',
     initialHTML: '这是一段测试文本',
-    operation: (adapter, start, end) => adapter.applyConfig(2, 6, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(2, 6, 'bold'),
     start: 0,
     end: 8,
     expectedHTML: '这是<strong>一段测试</strong>文本',
@@ -550,7 +550,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 17.2',
     initialHTML: 'Hello World',
-    operation: (adapter, start, end) => adapter.applyConfig(6, 11, 'italic'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(6, 11, 'italic'),
     start: 0,
     end: 11,
     expectedHTML: 'Hello <em>World</em>',
@@ -561,7 +561,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 18.1',
     initialHTML: '1234',
-    operation: (adapter, start, end) => adapter.applyConfig(10, 15, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(10, 15, 'bold'),
     start: 0,
     end: 0,
     expectedHTML: '1234',
@@ -571,7 +571,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 18.2',
     initialHTML: '1234',
-    operation: (adapter, start, end) => adapter.applyConfig(3, 1, 'italic'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(3, 1, 'italic'),
     start: 0,
     end: 0,
     expectedHTML: '1<em>23</em>4',
@@ -582,7 +582,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 19.1',
     initialHTML: '<a href="#">link</a>',
-    operation: (adapter, start, end) => adapter.applyConfig(0, 4, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(0, 4, 'bold'),
     start: 0,
     end: 4,
     expectedHTML: '<a href="#"><strong>link</strong></a>',
@@ -592,7 +592,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 19.2',
     initialHTML: 'text',
-    operation: (adapter, start, end) => adapter.insertText(2, '<a href="#">link</a>'),
+    operation: (adapter, _start, _end) => adapter.insertText(2, '<a href="#">link</a>'),
     start: 0,
     end: 0,
     expectedHTML: 'te&lt;a href="#"&gt;link&lt;/a&gt;xt',
@@ -603,7 +603,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 20.1',
     initialHTML: 'a'.repeat(100) + '中间' + 'b'.repeat(100),
-    operation: (adapter, start, end) => adapter.applyConfig(99, 101, 'bold'),
+    operation: (adapter, _start, _end) => adapter.applyConfig(99, 101, 'bold'),
     start: 0,
     end: 0,
     expectedHTML: 'a'.repeat(99) + '<strong>a中</strong>' + '间' + 'b'.repeat(100),
@@ -613,7 +613,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 20.2',
     initialHTML: Array.from({ length: 50 }, (_, i) => `<strong>${i}</strong>`).join(''),
-    operation: (adapter, start, end) => adapter.normalize(0, 50),
+    operation: (adapter, _start, _end) => adapter.normalize(0, 50),
     start: 0,
     end: 0,
     expectedHTML: '<strong>' + Array.from({ length: 50 }, (_, i) => i).join('') + '</strong>',
@@ -634,7 +634,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 21.2',
     initialHTML: '<strong>1234</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.removeConfig(0, 4, 'bold');
       adapter.applyConfig(0, 4, 'italic');
     },
@@ -648,7 +648,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 22.1',
     initialHTML: '',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.insertText(0, 'H');
       adapter.applyConfig(0, 1, 'bold');
       adapter.insertText(1, 'e');
@@ -665,7 +665,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 22.2',
     initialHTML: '<strong>123456</strong>',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       adapter.insertText(3, '-');
     },
     start: 0,
@@ -678,7 +678,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 23.1',
     initialHTML: 'test test test',
-    operation: (adapter, start, end) => {
+    operation: (adapter, _start, _end) => {
       const matches = adapter.findText('test');
       matches.forEach(({ start: s, end: e }) => {
         adapter.applyConfig(s, e, 'bold');
@@ -693,7 +693,7 @@ const testCases: TestCase[] = [
   {
     name: 'Test 23.2',
     initialHTML: 'replace this part',
-    operation: (adapter, start, end) => adapter.replaceText(8, 12, 'TEXT'),
+    operation: (adapter, _start, _end) => adapter.replaceText(8, 12, 'TEXT'),
     start: 0,
     end: 0,
     expectedHTML: 'replace TEXT part',
