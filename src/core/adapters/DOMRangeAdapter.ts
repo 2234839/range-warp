@@ -294,7 +294,7 @@ export class DOMRangeAdapter implements IRangeAdapter {
    * @param end 结束字符下标
    * @param allowEndBoundary 是否在末尾边界时回退到最后一个节点
    */
-  private createRangeInRoot(root: Element, start: number, end: number, allowEndBoundary: boolean): Range | null {
+  private createRangeInRoot(_root: Element, start: number, end: number, allowEndBoundary: boolean): Range | null {
     start = Math.max(0, start);
     end = Math.max(start, end);
 

@@ -113,18 +113,6 @@
     }
   };
 
-  /** 根据尺寸获取内边距 */
-  const _getPaddingBySize = (size: string) => {
-    switch (size) {
-      case 'small':
-        return '4px 8px';
-      case 'large':
-        return '8px 12px';
-      default:
-        return '6px 12px';
-    }
-  };
-
   /** 是否显示清除按钮 */
   const showClearButton = computed(() => {
     return props.clearable && modelValue.value && !props.disabled && !props.readonly;
