@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [
     vue(),
     tailwindcss(),
-    VueDevTools(),
-    autoSaveLogsPlugin(),
+    process.env.NODE_ENV === 'development' && VueDevTools(),
+    process.env.NODE_ENV === 'development' && autoSaveLogsPlugin(),
   ],
 })
