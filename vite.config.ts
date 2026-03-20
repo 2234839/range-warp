@@ -7,6 +7,11 @@ import { pilot } from 'vite-plugin-pilot'
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  server: {
+    watch: {
+      ignored: ['**/.pilot/**'],
+    },
+  },
   plugins: [
     vue(),
     tailwindcss(),

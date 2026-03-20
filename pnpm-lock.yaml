@@ -58,8 +58,8 @@ importers:
         specifier: ^8.0.1
         version: 8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
       vite-plugin-pilot:
-        specifier: ^0.4.1
-        version: 0.4.1(@vue/compiler-dom@3.5.30)(magic-string@0.30.21)(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+        specifier: ^0.4.2
+        version: 0.4.2(@vue/compiler-dom@3.5.30)(magic-string@0.30.21)(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       vite-plugin-vue-devtools:
         specifier: ^8.1.0
         version: 8.1.0(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))(vue@3.5.30(typescript@5.9.3))
@@ -1288,8 +1288,8 @@ packages:
       '@nuxt/kit':
         optional: true
 
-  vite-plugin-pilot@0.4.1:
-    resolution: {integrity: sha512-rnHvM0CugpIOEQgn5WXjTvlnK7+PoHXMxng9JZIxeousbuCkX20qFfdEYMrzewVR+JHJsvgyQJm8aj+M+Z2BFw==}
+  vite-plugin-pilot@0.4.2:
+    resolution: {integrity: sha512-/XGcQ22CDsQkYfqPM/O/VoIUVbWjwQpMRHb6VD8YG0fv/LE1pz0qjgRTzfaR5j9MkZ2Hs7CWynAjuLO18c7NXA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
     peerDependencies:
@@ -2563,7 +2563,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  vite-plugin-pilot@0.4.1(@vue/compiler-dom@3.5.30)(magic-string@0.30.21)(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)):
+  vite-plugin-pilot@0.4.2(@vue/compiler-dom@3.5.30)(magic-string@0.30.21)(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)):
     dependencies:
       vite: 8.0.1(@types/node@25.5.0)(esbuild@0.27.4)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     optionalDependencies:

@@ -7,10 +7,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# 开发日志
-.dev-logs/
-!.dev-logs/remote-exec.ts
-
 node_modules
 dist
 dist-ssr
@@ -32,3 +28,5 @@ src/**/CLAUDE.md
 src/CLAUDE.md
 docs/**/CLAUDE.md
 public/**/CLAUDE.md
+
+.pilot
