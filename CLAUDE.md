@@ -1,52 +1,33 @@
 - 禁止执行 dev 进行测试，可以使用 tsc 检测类型问题
 - tailwindcss 不要使用 @apply ，组件化永远是更优选择
 
-## 调试前端代码（工作流程）
+## 调试前端代码（vite-plugin-pilot）
 
-**每次修改代码后都要主动查看网页运行日志来验证实现是否正确！**
+**每次修改代码后都要主动使用 pilot 验证页面状态！**
 
-### 网页运行日志系统
-- 前端自动收集所有 console 输出（log、info、warn、error）
-- 每秒增量追加到 `.dev-logs/latest-errors.log`
-- 开发服务器启动时自动清空日志
-- 日志显示完整的错误信息和堆栈跟踪
+前置条件：dev server 已启动，浏览器已打开页面
 
-**工作流程**：
+### 常用命令
+
+```bash
+npx pilot page          # 查看页面状态（compact snapshot）
+npx pilot run 'code' page  # 执行 JS + 查看结果 + 页面状态（一步完成，推荐）
+npx pilot run 'code' logs  # 执行 JS + 查看结果 + 控制台日志
+npx pilot logs          # 查看最近控制台日志
+npx pilot status        # 列出已连接的浏览器 tab
+npx pilot help          # 查看辅助函数列表
+```
+
+### 工作流程
 1. 修改代码
-2. 查看日志确认没有错误：`tail -100 .dev-logs/latest-errors.log`
-3. 反复迭代直到日志正常
+2. `npx pilot page` 查看页面状态，或 `npx pilot logs` 查看控制台日志
+3. 发现问题则修复，反复迭代直到正常
 
-### 远程执行 JS（主动测试页面）
-
-**可以直接写入文件来在页面上执行 JavaScript 代码：**
-
-```bash
-# 1. 写入要执行的 JS 代码
-echo 'document.querySelector("h1")?.textContent' > .dev-logs/pending-js.txt
-
-# 2. 等待 1-2 秒让页面执行
-
-# 3. 查看日志中的执行结果
-tail -100 .dev-logs/latest-errors.log | grep RemoteExec
-```
-
-**使用场景**：
-- 验证页面元素是否正确渲染
-- 检查组件状态
-- 执行测试代码
-- 获取页面运行时信息
-
-**示例**：
-```bash
-# 检查页面标题
-echo 'document.title' > .dev-logs/pending-js.txt
-
-# 检查编辑器是否存在
-echo 'window.editor !== null' > .dev-logs/pending-js.txt
-
-# 获取编辑器内容
-echo 'document.querySelector("[contenteditable]")?.innerHTML' > .dev-logs/pending-js.txt
-```
+### 辅助函数（浏览器端 JS）
+- `__pilot_clickByText(t,n)` / `__pilot_click(i)` — 点击元素
+- `__pilot_typeByPlaceholder(p,v)` — 按占位符输入（Vue/React 用这个）
+- `__pilot_findByText(t)` — 查找元素
+- `__pilot_waitFor(t,timeout,disappear)` — 等待元素出现/消失
 
 **重要**：不要等用户去调试，主动查看日志并测试功能！
 

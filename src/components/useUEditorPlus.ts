@@ -14,8 +14,8 @@ import type { BaseEditorOptions, EditorComposable, SelectionContext } from './ed
 /** composable 参数（UEditor Plus 无额外选项） */
 interface UseUEditorPlusOptions extends BaseEditorOptions {}
 
-/** UEditor Plus 静态资源基址 */
-const UE_BASE = '/UEditorPlus';
+/** UEditor Plus 静态资源基址（兼容 GitHub Pages 等非根路径部署） */
+const UE_BASE = import.meta.env.BASE_URL + 'UEditorPlus';
 
 /** 脚本是否已加载（全局单例） */
 let ueScriptLoaded = false;
