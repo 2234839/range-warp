@@ -82,8 +82,8 @@ export interface BaseEditorOptions {
   onBlur?: () => void;
   /** 选区变化 */
   onSelectionChange?: () => void;
-  /** 复制/剪切事件 */
-  onCopyCut?: (event: ClipboardEvent) => void;
+  /** 粘贴事件 */
+  onPaste?: (event: ClipboardEvent) => void;
 }
 
 /** 编辑器 composable 统一接口 */

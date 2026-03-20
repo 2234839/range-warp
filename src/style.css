@@ -14,6 +14,16 @@ body {
   min-height: 100vh;
 }
 
+/* 编辑器内表格边框 */
+[contenteditable] table {
+  border-collapse: collapse;
+}
+[contenteditable] td,
+[contenteditable] th {
+  border: 1px solid #d1d5db;
+  padding: 4px 8px;
+}
+
 /* 滚动条样式 */
 ::-webkit-scrollbar {
   width: 8px;

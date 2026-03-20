@@ -40,7 +40,7 @@ function loadScript(src: string): Promise<void> {
  * 在 onBeforeUnmount 中调用 `destroy()` 清理
  */
 export function useUEditorPlus(options: UseUEditorPlusOptions): EditorComposable {
-  const { containerRef, currentUser, onContentChange, onFocus, onBlur, onSelectionChange, onCopyCut } = options;
+  const { containerRef, currentUser, onContentChange, onFocus, onBlur, onSelectionChange, onPaste } = options;
 
   const editor = shallowRef<EditorType | null>(null);
   const selectionContext = ref<SelectionContext>({ ownerWindow: window, container: null });
@@ -151,9 +151,8 @@ export function useUEditorPlus(options: UseUEditorPlusOptions): EditorComposable
       if (onSelectionChange) {
         useEventListener(iframeDocument, 'selectionchange', onSelectionChange);
       }
-      if (onCopyCut) {
-        useEventListener(body, 'copy', onCopyCut);
-        useEventListener(body, 'cut', onCopyCut);
+      if (onPaste) {
+        useEventListener(body, 'paste', onPaste);
       }
 
       /** 监听 UEditor 内容变化 */

@@ -1,10 +1,9 @@
 <script setup lang="ts">
   import { ref, computed, onMounted, onBeforeUnmount, useTemplateRef } from 'vue';
   import { useDebounceFn } from '@vueuse/core';
-  import { EMPTY_FORMAT_STATE, STYLE_KEYS, getFormattingAncestors, wrapWithMissingFormatting, TOOLBAR_BUTTONS, type FormatState, type EditorComposable } from './editor-utils';
+  import { EMPTY_FORMAT_STATE, STYLE_KEYS, TOOLBAR_BUTTONS, type FormatState, type EditorComposable } from './editor-utils';
   import { useUEditorPlus } from './useUEditorPlus';
   import { useNativeEditor } from './useNativeEditor';
-  import { getNonCopyableSelector } from '../core/adapters/DOMRangeAdapter';
 
 
   /** 组件属性 */
@@ -75,7 +74,7 @@
     },
     onBlur: () => { isEditorFocused.value = false; },
     onSelectionChange: handleSelectionChange,
-    onCopyCut: handleCopyCut,
+    onPaste: handlePaste,
   });
 
   /** UEditor Plus composable */
@@ -89,7 +88,7 @@
     },
     onBlur: () => { isEditorFocused.value = false; },
     onSelectionChange: handleSelectionChange,
-    onCopyCut: handleCopyCut,
+    onPaste: handlePaste,
   });
 
   /**
@@ -180,58 +179,40 @@
   }
 
   /**
-   * 拦截复制/剪切事件，清洗剪贴板 HTML
+   * 拦截粘贴事件，清洗剪贴板 HTML 中的不可复制容器
    *
-   * 1. 从选区提取 HTML 片段
-   * 2. 清洗不可复制容器（书签、修订等），保留文本和内联样式
-   * 3. 恢复 cloneContents 丢失的格式化祖先上下文（如 em、strong）
-   * 4. 写入剪贴板
-   *
-   * 参考 ProseMirror / Quill / Slate 等主流编辑器均始终拦截复制事件，
-   * 通过 clipboardData.setData 写入清洗后的 HTML，不放行给浏览器原生处理
+   * 从 clipboardData 读取 HTML，移除书签/修订等语义容器的包裹标签，
+   * 保留其文本内容和内联样式，然后插入编辑器
    */
-  function handleCopyCut(event: ClipboardEvent) {
+  function handlePaste(event: ClipboardEvent) {
     if (!activeEditor.value) return;
 
-    const { ownerWindow, container } = active.value.selectionContext.value;
-    const selection = ownerWindow.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    const { container } = active.value.selectionContext.value;
+    if (!container) return;
 
-    const range = selection.getRangeAt(0);
-    if (!container?.contains(range.commonAncestorContainer)) return;
+    const html = event.clipboardData?.getData('text/html');
+    if (!html) return;
 
     event.preventDefault();
 
-    /** 从选区提取 HTML 片段 */
-    const fragment = range.cloneContents();
-    const wrapper = ownerWindow.document.createElement('div');
-    wrapper.appendChild(fragment);
-
     /** 清洗不可复制容器，保留文本和内联样式 */
-    let html = activeEditor.value.sanitizeHTML(wrapper.innerHTML);
+    const sanitized = activeEditor.value.sanitizeHTML(html);
 
-    /** 恢复 cloneContents 丢失的格式化祖先（加粗、斜体等） */
-    const nonCopyableSelector = getNonCopyableSelector();
-    const ancestors = getFormattingAncestors(range, container, nonCopyableSelector);
-    if (ancestors.length > 0) {
-      html = wrapWithMissingFormatting(html, ancestors);
-    }
-
-    /**
-     * 纯文本使用 adapter 的 getText 而非 selection.toString()
-     * selection.toString() 不包含块边界的虚拟 \n，与我们的位置系统不一致
-     */
-    const rangeObj = activeEditor.value!.createRangeFromDOM(range);
-    const plainText = rangeObj ? rangeObj.getText() : selection.toString();
-    event.clipboardData?.setData('text/html', html);
-    event.clipboardData?.setData('text/plain', plainText);
-
-    /** 剪切时删除选区内容 */
-    if (event.type === 'cut') {
+    /** 使用 insertHTML 命令插入清洗后的内容 */
+    const selection = container.ownerDocument.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
       range.deleteContents();
-      emit('update:modelValue', active.value.getHTML());
-      activeEditor.value.repairSplitContainers();
+      const fragment = range.createContextualFragment(sanitized);
+      range.insertNode(fragment);
+      /** 将光标移到插入内容末尾 */
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
     }
+
+    emit('update:modelValue', active.value.getHTML());
+    debouncedRepair();
   }
 
   /**
